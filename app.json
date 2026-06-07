@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "yiiva-app",
+    "slug": "yiiva-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/ICON_BLACK.png",
+    "scheme": "yiivaapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/ICON_BLACK.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "usesCleartextTraffic": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/ICON_BLACK.png"
+    },
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
