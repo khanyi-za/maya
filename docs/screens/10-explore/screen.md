@@ -4,6 +4,16 @@
 > Endpoints this screen calls → [`api-contract.md`](./api-contract.md)
 > Open questions → [`../../open-questions.md`](../../open-questions.md) §Explore
 
+> 🛑 **SCRAPPED (2026-06-10).** This screen is shelved — **no backend work will be
+> done for it.** It is an orphan surface: hidden from the tab bar (`href: null`),
+> reachable only via two "See All" links on Home that are themselves slated to
+> re-route elsewhere (Trending Brands → `/shop` per ST-9; New Arrivals → a TBD
+> listing). Every section (Trending Brands, CategoryFilter, products grid)
+> duplicates Home. Revisit only if a product owner answers EX-1 ("what IS Explore
+> vs Home?") with a distinct editorial/curatorial purpose. Its only unique
+> endpoint — `GET /products/featured` — is therefore also **deferred** (nothing
+> else consumes it).
+
 > ⚠️ **This is the screen with the least clear product purpose today.** The tab is hidden from the bottom nav (`href: null` in `(tabs)/_layout.tsx:47`); reached only via "See All" CTAs from Home. The implementation surfaces Trending Brands + a CategoryFilter + a "For You" products grid — but every section overlaps with what Home already does. **A product owner decision is needed before this screen can scale (see open-questions §EX-1).** This doc captures what's there and flags the strategic gap.
 
 ---

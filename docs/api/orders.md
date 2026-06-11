@@ -33,9 +33,27 @@ Each status transition is server-driven; mobile reads but never writes status di
 
 ---
 
-## 1. Create order 🔴
+## 1. Create order ✅ (v1 scope)
 
 The big one. Initiates payment flow and creates the order record.
+
+> **Implemented in nuwa: `POST /api/orders`** — reuses the tested web checkout
+> (per-store ShipLogic rate → orders + PaymentGroup → PayFast). **v1 scope:**
+> - **Auth-required** (guest checkout via X-Cart-Session deferred).
+> - **Delivery only** (pickup deferred). **Payment = PayFast redirect** (card/EFT
+>   etc. on PayFast's page); Apple Pay / Payflex / saved cards / promo deferred.
+>   Those body fields are accepted but ignored.
+> - **The "order" is the nuwa PaymentGroup** (one PayFast txn across N per-store
+>   orders); `order.id` = paymentGroupId.
+> - **Body used:** `addressId`, `returnUrl`, `cancelUrl` (deep links). Response
+>   `payment` carries `{ type:'redirect', actionUrl, fields, returnUrl }` — the
+>   WebView **auto-submits `fields` (form POST) to `actionUrl`** (PayFast is a
+>   form post, not a GET URL). `paymentUrl` is provided as an alias of `actionUrl`.
+> - **Totals preview:** call **`POST /api/checkout/quote`** `{ addressId }` →
+>   `{ subtotal, shipping, tax, total, currency }` (replaces maya's
+>   `/shipping/rates` for the order-total section). **VAT is INCLUSIVE** — `tax`
+>   is the VAT already inside `total`, NOT added on top (D6/CK-2). Do not add 15%.
+> - **Errors:** `409 STOCK_DRIFT`, `409 CART_EMPTY`.
 
 ```
 POST /orders
@@ -132,13 +150,20 @@ POST /orders
 
 ---
 
-## 2. Get order detail 🔴
+## 2. Get order detail ✅
 
 ```
 GET /orders/{orderId}
 ```
 
-**Auth:** required (or guest via `X-Cart-Session`)
+**Auth:** required (guest via `X-Cart-Session` deferred)
+
+> **Implemented in nuwa: `GET /api/orders/:id`** (`id` = paymentGroupId).
+> Aggregates the child per-store orders into one consolidated maya order:
+> consolidated `status` (SHIPPED when ANY ships, DELIVERED only when ALL —
+> maya TO-8), merged `items`, summed totals, `tax` = VAT-included portion.
+> `orderNumber` is the first child order's `YV-…` number. `payment.last4` is
+> null (PayFast doesn't return it). 404 `ORDER_NOT_FOUND` on missing/cross-user.
 
 ### Response — 200 OK
 
@@ -221,15 +246,29 @@ Full spec drafted with the Account screen doc.
 
 ---
 
-## 4. Get order tracking 🔴
+## 4. Get order tracking ✅ (local data, not a live proxy)
 
-Live courier-side tracking for shipped orders. Proxies ShipLogic.
+Courier-side tracking for shipped orders.
 
 ```
 GET /orders/{orderId}/tracking
 ```
 
-**Auth:** required (signed-in users) OR `X-Cart-Session` (guest order owner)
+**Auth:** required (guest via `X-Cart-Session` deferred)
+
+> **Implemented in nuwa: `GET /api/orders/:id/tracking`** — serves the
+> **locally-stored** `Shipment` + `ShipmentTrackingEvent` rows that the ShipLogic
+> webhook already populates (Shipping Phase 6). **Not a live ShipLogic proxy** —
+> this respects the Shipping-module hold (zero new integration). Consolidates
+> across the order's child shipments; `currentStatus` is mapped from
+> `ShipmentStatus`. `404 TRACKING_NOT_AVAILABLE` before any shipment exists
+> (maya hides the sub-section; the timeline still works from `statusHistory`).
+> ⚠️ ShipLogic **sandbox doesn't deliver webhooks**, so these tables stay empty
+> until production webhook delivery is verified — expect 404 in sandbox.
+>
+> Also: **`GET /api/orders/:id` now returns `cancellationEligibleUntil`** (§2) —
+> `confirmedAt + 24h` while CONFIRMED (gates maya's Cancel button per O-3). nuwa's
+> cancel is more permissive than this hint; it's a UI gate only.
 
 ### Response — 200 OK
 
@@ -290,13 +329,24 @@ GET /orders/{orderId}/tracking
 
 ---
 
-## 5. Cancel order 🔴
+## 5. Cancel order ✅
 
 ```
 POST /orders/{orderId}/cancel
 ```
 
-**Auth:** required (signed-in users) OR `X-Cart-Session` (guest order owner — limited to within cancellation window)
+**Auth:** required (guest via `X-Cart-Session` deferred)
+
+> **Implemented in nuwa: `POST /api/orders/:id/cancel`** (`id` = paymentGroupId).
+> Cancels every cancellable child order (PENDING/CONFIRMED) via the shared
+> BuyerOrdersService (which best-effort-cancels any ShipLogic shipment). No body.
+> **`refund` is `null` in v1** — buyer-cancel does NOT auto-refund; paid-order
+> refunds are an admin/manual flow. `409 ORDER_NOT_CANCELLABLE` when nothing is
+> cancellable (already shipped/delivered); `404 ORDER_NOT_FOUND` otherwise.
+>
+> Note: Order Success's other two actions are out of this scope —
+> `POST /auth/claim` already exists (auth surface, wired by the Auth screens) and
+> `POST /orders/{id}/retry-payment` (OS-3) is deferred (re-checkout instead).
 
 ### Body
 

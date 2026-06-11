@@ -10,6 +10,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
 import { useCartStore } from '@/lib/cart-store';
+import { useAuthHydration, useForegroundRefresh } from '@/lib/auth';
 
 // Create QueryClient instance with mobile-optimized configuration
 const queryClient = new QueryClient({
@@ -42,6 +43,11 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const loadSocialState = useSocialStore((state) => state.loadState);
   const loadCartState = useCartStore((state) => state.loadState);
+
+  // Auth session: cold-start refresh-token hydration + foreground token renewal
+  // (docs/auth-mobile-guide.md §5.1, §9).
+  useAuthHydration();
+  useForegroundRefresh();
 
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),

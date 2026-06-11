@@ -10,16 +10,20 @@
 
 | § | Endpoint | Method | Auth | Status | Used by |
 |---|---|---|---|---|---|
-| 1 | `/merchants/trending` | GET | optional | 🔴 | Home |
-| 2 | `/merchants/{username}` | GET | optional | 🟡 | Merchant Profile |
-| 3 | `/merchants/{username}/products` | GET | optional | 🟡 | Merchant Profile |
-| 4 | `/merchants` | GET | optional | 🔴 | Shop tab (A–Z brand directory) |
+| 1 | `/merchants/trending` | GET | optional | ✅ | Home |
+| 2 | `/merchants/{username}` | GET | optional | ✅ | Merchant Profile |
+| 3 | `/merchants/{username}/products` | GET | optional | ✅ | Merchant Profile |
+| 4 | `/merchants` | GET | optional | ✅ | Shop tab (A–Z brand directory) |
 
 Status: ✅ implemented · 🟡 proposed (already in `lib/api-client.ts`) · 🔴 proposed (new)
 
 ---
 
-## 1. Get trending merchants 🔴
+## 1. Get trending merchants ✅
+
+> Implemented in nuwa: `GET /api/merchants/trending`. v1 heuristic = ACTIVE
+> stores by `followerCount` (Phalo replaces later). `username` = `Store.slug`;
+> `isVerified` always true (buyer-visible stores are go-live/verified).
 
 ```
 GET /merchants/trending
@@ -65,7 +69,19 @@ Global default. Response is cacheable — recommend `Cache-Control: public, max-
 
 ---
 
-## 2. Get merchant by username 🟡
+## 2. Get merchant by username ✅
+
+> **Implemented in nuwa: `GET /api/merchants/:username`** (`username` = Store
+> slug). `heroMedia` ← `StoreBannerMedia` (ordered); `bio` ← store description;
+> `location` ← first public StoreAddress city (null if none); `contact.email` ←
+> `store.contactEmail`; `postCount` = ACTIVE product count; `isVerified` = true
+> for ACTIVE stores. **`messagingEnabled` is always `true` in v1** (no per-store
+> toggle; Chat backend is Screen 12). `followingCount` = 0 (MP-1).
+> **Status handling (MP-10):** ACTIVE → full profile; SUSPENDED/CLOSED → returned
+> WITH `status` (maya shows the unavailable placeholder); never-live stores
+> (DRAFT/PENDING/APPROVED/PENDING_GO_LIVE) → `404 MERCHANT_NOT_FOUND`.
+> Merchant view tracking (`POST /api/merchants/:id/view`, thin AnalyticsEvent →
+> Phalo) is also implemented.
 
 ```
 GET /merchants/{username}
@@ -133,7 +149,15 @@ Global default.
 
 ---
 
-## 3. Get merchant products 🟡
+## 3. Get merchant products ✅
+
+> **Implemented in nuwa: `GET /api/merchants/:username/products`** — reuses the
+> shared feed-grid query (same product card shape, cursor pagination,
+> personalised flags). `categories[]` = distinct **category slugs** across the
+> store's ACTIVE products; `clothingType` filters by category slug/name. **Sort
+> is `newest` only in v1** — price sorts (MP-7) need cursor-on-price, deferred to
+> v2 (the `sort` param is accepted but ignored beyond newest). 404 if the store
+> isn't ACTIVE.
 
 ```
 GET /merchants/{username}/products
@@ -181,7 +205,16 @@ Global default.
 
 ---
 
-## 4. List merchants (A–Z directory) 🔴
+## 4. List merchants (A–Z directory) ✅
+
+> **Implemented in nuwa: `GET /api/merchants`** — ACTIVE stores, optional
+> `genderType` (brands with ≥1 product in that gender) + `letter` filters,
+> `sort` (name_asc default / name_desc / newest / popularity), cursor-paginated.
+> Cards are the lighter directory shape (no bio/heroMedia) with `productCount`
+> (ACTIVE products) and `isFollowedByMe` when authed. `lettersWithBrands[]` is
+> computed across the whole gender-filtered set for the alphabet index. (v1
+> loads all matching names to build the letter set — fine at current scale;
+> precompute if the brand count grows large.)
 
 ```
 GET /merchants

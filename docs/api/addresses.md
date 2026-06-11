@@ -4,7 +4,7 @@
 > Global rules → [`../api-conventions.md`](../api-conventions.md).
 > Open questions → [`../open-questions.md`](../open-questions.md) §Addresses.
 
-All endpoints in this domain are **🔴 proposed (new)**. Addresses are user-scoped — all endpoints require authentication. Guest checkout captures addresses inline in the `POST /orders` body without persisting.
+**✅ Implemented in nuwa** at `/api/me/addresses` (GET/POST/PATCH/DELETE + PATCH `:id/default`). Addresses are user-scoped — all endpoints require authentication. Reuses the web AddressService rules (max 4, one-default invariant, soft-delete, 404-on-cross-user). nuwa stores `addressLine1`/`addressLine2` ↔ maya `line1`/`line2`; `country` is always `"ZA"` in v1. (maya's `suburb`-less shape means ShipLogic geocoding loses the suburb component — acceptable v1.)
 
 ---
 
@@ -47,7 +47,7 @@ Field notes:
 
 ---
 
-## 1. List my addresses 🔴
+## 1. List my addresses ✅
 
 ```
 GET /me/addresses
@@ -80,7 +80,7 @@ Standard.
 
 ---
 
-## 2. Create address 🔴
+## 2. Create address ✅
 
 ```
 POST /me/addresses
@@ -109,7 +109,7 @@ Returns the created address with its assigned `id`.
 
 ---
 
-## 3. Update address 🔴
+## 3. Update address ✅
 
 ```
 PATCH /me/addresses/{id}
@@ -138,7 +138,7 @@ Standard.
 
 ---
 
-## 4. Delete address 🔴
+## 4. Delete address ✅
 
 ```
 DELETE /me/addresses/{id}
@@ -165,7 +165,7 @@ Standard.
 
 ---
 
-## 5. Set default address 🔴
+## 5. Set default address ✅
 
 ```
 PATCH /me/addresses/{id}/default

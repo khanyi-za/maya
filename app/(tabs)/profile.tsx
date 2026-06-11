@@ -4,150 +4,261 @@ import { YiivaHeader } from '@/components/YiivaHeader';
 import { SideMenu } from '@/components/SideMenu';
 import { FeedTabs } from '@/components/FeedTabs';
 import { useFilter } from '@/contexts/FilterContext';
-import React, { useState } from 'react';
-import { StyleSheet, View, StatusBar, TouchableOpacity, ScrollView } from 'react-native';
+import { useCategories } from '@/hooks/useHomeQueries';
+import { useMerchantDirectory } from '@/hooks/useShopQueries';
+import { imageSource } from '@/lib/image-source';
+import type { DirectoryMerchant, GenderType } from '@/lib/api-client';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  StyleSheet,
+  View,
+  StatusBar,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 
-interface Category {
-  id: string;
-  name: string;
-  image: any;
-}
-
-interface Brand {
-  id: string;
-  name: string;
-  logo: any;
-}
-
-const womenCategories: Category[] = [
-  { id: '1', name: 'SHOES', image: require('../../assets/design_screenshots/women_categories/shoes.png') },
-  { id: '2', name: 'TOPS', image: require('../../assets/design_screenshots/women_categories/tops.png') },
-  { id: '3', name: 'BEAUTY', image: require('../../assets/design_screenshots/women_categories/accessories.png') },
-  { id: '4', name: 'DRESSES', image: require('../../assets/design_screenshots/women_categories/dresses.png') },
-  { id: '5', name: 'BOTTOMS', image: require('../../assets/design_screenshots/women_categories/bottoms.png') },
-  { id: '6', name: 'ACCESSORIES', image: require('../../assets/design_screenshots/women_categories/accessories.png') },
-  { id: '7', name: 'SPORT', image: require('../../assets/design_screenshots/women_categories/sport.png') },
-  { id: '8', name: 'JACKETS & COATS', image: require('../../assets/design_screenshots/women_categories/jackets_and_coats.png') },
-  { id: '9', name: 'LINGERIE & SLEEPWEAR', image: require('../../assets/design_screenshots/women_categories/lingerie_and_sleepwear.png') },
-  { id: '10', name: 'SWIMWEAR', image: require('../../assets/design_screenshots/women_categories/swimwear.png') },
-];
-
-const menCategories: Category[] = [
-  { id: '1', name: 'SHOES', image: require('../../assets/design_screenshots/men_categories/shoes.png') },
-  { id: '2', name: 'TOPS', image: require('../../assets/design_screenshots/men_categories/Tops.png') },
-  { id: '3', name: 'JEANS, PANTS & SHORTS', image: require('../../assets/design_screenshots/men_categories/pants_and_jeans.png') },
-  { id: '4', name: 'SPORT', image: require('../../assets/design_screenshots/men_categories/sport.png') },
-  { id: '5', name: 'ACCESSORIES', image: require('../../assets/design_screenshots/men_categories/accessories.png') },
-  { id: '6', name: 'GROOMING', image: require('../../assets/design_screenshots/men_categories/grooming.png') },
-  { id: '7', name: 'UNDERWEAR, SLEEPWEAR & SOCKS', image: require('../../assets/design_screenshots/men_categories/underwear_and_socks.png') },
-  { id: '8', name: 'JACKETS & COATS', image: require('../../assets/design_screenshots/men_categories/jackets_and_coats.png') },
-  { id: '9', name: 'FORMALWEAR', image: require('../../assets/design_screenshots/men_categories/formalwear.png') },
-  { id: '10', name: 'SWIMWEAR', image: require('../../assets/design_screenshots/men_categories/swimwear.png') },
-];
-
-// Brands from brand_list_b.png (1-19) and brand_list_a.png (20-37) - alphabetically sorted
-const allBrands: Brand[] = [
-  { id: '1', name: 'Alora Men', logo: require('../../assets/images/logos/tol\'thema-logo.png') },
-  { id: '2', name: 'Alora women', logo: require('../../assets/images/logos/suhu-logo.png') },
-  { id: '3', name: 'Amanda Laird Cherry Apparel', logo: require('../../assets/images/logos/sakanya_logo.png') },
-  { id: '4', name: 'ArtClub & friends', logo: require('../../assets/images/logos/fade_logo.png') },
-  { id: '5', name: 'Ben Sherman South Africa', logo: require('../../assets/images/logos/embedded_logo.png') },
-  { id: '6', name: 'Black Monarchy', logo: require('../../assets/images/logos/Koakoa_logo.png') },
-  { id: '7', name: 'blaq child', logo: require('../../assets/images/logos/ masonwabe_profile_pic.png') },
-  { id: '8', name: 'chepastreetwar', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '9', name: 'collector (ctt.r__)', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '10', name: 'cultish', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '11', name: 'dorefashionsa', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '12', name: 'embedded', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '13', name: 'fabrikhunter', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '14', name: 'fade', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '15', name: 'house of ntu', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '16', name: 'Lovu Clothing', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '17', name: 'mali mali clothing', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '18', name: 'mobreign', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '19', name: 'muze', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '20', name: 'nolandu.couture', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '21', name: 'OBLVN', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '22', name: 'old money', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '23', name: 'Paloma Boutique', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '24', name: 'rareblaq', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '25', name: 'rossimoda_official', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '26', name: 'S & M Collection', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '27', name: 'sakhanya', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '28', name: 'shara', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '29', name: 'stylealertsa', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '30', name: 'suhu', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '31', name: 'thefieldstore', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '32', name: 'tol-thema', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '33', name: 'udarkie', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '34', name: 'unseen grail', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '35', name: 'Verse Studio', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '36', name: 'Vintage Joint', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-  { id: '37', name: 'violet', logo: require('../../assets/images/ masonwabe_profile_pic.png') },
-];
+const VIEW_MODE_KEY = 'yiiva.shopViewMode';
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { activePrimaryFilter } = useFilter();
   const [shopFilterMode, setShopFilterMode] = useState<'brands' | 'categories'>('brands');
   const [isMenuVisible, setIsMenuVisible] = useState(false);
 
-  const handleMenuPress = () => {
-    setIsMenuVisible(true);
-  };
+  // 'home-lifestyle' has no backend taxonomy yet (open-questions §P-4).
+  const gender: GenderType | null =
+    activePrimaryFilter === 'home-lifestyle' ? null : activePrimaryFilter;
 
-  const handleCartPress = () => {
-    // Handle cart press
-    console.log('Cart pressed');
-  };
+  const directoryQuery = useMerchantDirectory(gender);
+  const categoriesQuery = useCategories(gender);
 
-  const handleNotificationsPress = () => {
-    // Handle notifications press
-    console.log('Notifications pressed');
-  };
+  const brands: DirectoryMerchant[] =
+    directoryQuery.data?.pages.flatMap((page) => page.merchants) ?? [];
+  const lettersWithBrands = new Set(
+    directoryQuery.data?.pages[0]?.lettersWithBrands ?? []
+  );
+  const categories = categoriesQuery.data?.categories ?? [];
 
-  const handleFeedTabChange = (tab: 'men' | 'women' | 'home-lifestyle') => {
-    // Handle feed tab change
-    console.log('Feed tab changed to:', tab);
-    // Filter state is now managed by the FeedTabs component via context
-  };
+  // Letter -> section y-offset, measured at render for the index jump.
+  const sectionOffsets = useRef<Record<string, number>>({});
+  const brandsScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(VIEW_MODE_KEY)
+      .then((mode) => {
+        if (mode === 'brands' || mode === 'categories') setShopFilterMode(mode);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleMenuPress = () => setIsMenuVisible(true);
+  const handleCartPress = () => router.push('/cart');
+  const handleNotificationsPress = () => console.log('Notifications pressed');
 
   const handleShopFilterChange = (mode: 'brands' | 'categories') => {
     setShopFilterMode(mode);
-    console.log('Shop filter mode changed to:', mode);
+    AsyncStorage.setItem(VIEW_MODE_KEY, mode).catch(() => {});
   };
 
-  const handleCategoryPress = (category: Category) => {
-    console.log('Category pressed:', category.name);
-    // Navigate to category products
+  const handleCategoryPress = (slug: string) => {
+    // Category Listing screen doesn't exist yet (open work in status.md).
+    console.log('Category pressed:', slug);
   };
 
-  const getCurrentCategories = () => {
-    if (activePrimaryFilter === 'women') return womenCategories;
-    if (activePrimaryFilter === 'men') return menCategories;
-    return []; // Home & Lifestyle categories can be added later
+  const handleBrandPress = (brand: DirectoryMerchant) =>
+    router.push(`/artist/${brand.username}`);
+
+  const handleLetterPress = (letter: string) => {
+    const y = sectionOffsets.current[letter];
+    if (y !== undefined) {
+      brandsScrollRef.current?.scrollTo({ y, animated: true });
+    }
   };
 
-  const handleBrandPress = (brand: Brand) => {
-    console.log('Brand pressed:', brand.name);
-    // Navigate to brand products
+  const handleBrandsScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const nearBottom =
+      contentOffset.y + layoutMeasurement.height > contentSize.height - 400;
+    if (nearBottom && directoryQuery.hasNextPage && !directoryQuery.isFetchingNextPage) {
+      directoryQuery.fetchNextPage();
+    }
   };
 
-  // Group brands by first letter
-  const getGroupedBrands = () => {
-    const grouped: { [key: string]: Brand[] } = {};
-    allBrands.forEach(brand => {
-      const firstLetter = brand.name[0].toUpperCase();
-      if (!grouped[firstLetter]) {
-        grouped[firstLetter] = [];
-      }
-      grouped[firstLetter].push(brand);
-    });
-    return grouped;
+  // Group loaded brands by first letter (backend sorts name_asc).
+  const groupedBrands: { [key: string]: DirectoryMerchant[] } = {};
+  brands.forEach((brand) => {
+    const firstLetter = brand.displayName[0]?.toUpperCase() ?? '#';
+    if (!groupedBrands[firstLetter]) {
+      groupedBrands[firstLetter] = [];
+    }
+    groupedBrands[firstLetter].push(brand);
+  });
+  const loadedLetters = Object.keys(groupedBrands).sort();
+
+  const renderPlaceholder = (title: string, body: string) => (
+    <View style={styles.placeholderContainer}>
+      <ThemedText style={styles.placeholderTitle}>{title}</ThemedText>
+      <ThemedText style={styles.placeholderText}>{body}</ThemedText>
+    </View>
+  );
+
+  const renderRetry = (message: string, onRetry: () => void) => (
+    <View style={styles.placeholderContainer}>
+      <ThemedText style={styles.placeholderTitle}>{message}</ThemedText>
+      <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+        <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderCategoriesView = () => {
+    if (gender === null) {
+      return renderPlaceholder(
+        'Coming soon',
+        'Home & Lifestyle is on its way. Check back shortly.'
+      );
+    }
+    if (categoriesQuery.isPending) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ActivityIndicator size="large" color="#333" />
+        </View>
+      );
+    }
+    if (categoriesQuery.isError) {
+      return renderRetry("Couldn't load categories", () => categoriesQuery.refetch());
+    }
+    if (categories.length === 0) {
+      return renderPlaceholder('No categories yet', 'Check back soon.');
+    }
+
+    return (
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.categoriesContainer}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.slug}
+              style={styles.categoryCard}
+              onPress={() => handleCategoryPress(category.slug)}
+              activeOpacity={0.9}
+            >
+              <View style={styles.categoryContent}>
+                <ThemedText style={styles.categoryTitle}>
+                  {category.displayName.toUpperCase()}
+                </ThemedText>
+                {category.image && (
+                  <Image
+                    source={imageSource(category.image)}
+                    style={styles.categoryImage}
+                    contentFit="cover"
+                  />
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    );
   };
 
-  const groupedBrands = getGroupedBrands();
-  const alphabetLetters = Object.keys(groupedBrands).sort();
+  const renderBrandsView = () => {
+    if (gender === null) {
+      return renderPlaceholder(
+        'Coming soon',
+        'Home & Lifestyle is on its way. Check back shortly.'
+      );
+    }
+    if (directoryQuery.isPending) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ActivityIndicator size="large" color="#333" />
+        </View>
+      );
+    }
+    if (directoryQuery.isError) {
+      return renderRetry("Couldn't load brands", () => directoryQuery.refetch());
+    }
+    if (brands.length === 0) {
+      return renderPlaceholder('No brands yet', 'New brands are joining YIIVA soon.');
+    }
+
+    return (
+      <View style={styles.brandsContainer}>
+        {/* Alphabetical Index — letters without brands render greyed */}
+        <View style={styles.alphabetIndex}>
+          {ALPHABET.map((letter) => {
+            const hasBrands = lettersWithBrands.has(letter);
+            return (
+              <TouchableOpacity
+                key={letter}
+                style={styles.alphabetItem}
+                onPress={() => hasBrands && handleLetterPress(letter)}
+                disabled={!hasBrands}
+              >
+                <ThemedText
+                  style={[styles.alphabetText, !hasBrands && styles.alphabetTextEmpty]}
+                >
+                  {letter}
+                </ThemedText>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Brands List */}
+        <ScrollView
+          ref={brandsScrollRef}
+          style={styles.brandsScrollView}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleBrandsScroll}
+          scrollEventThrottle={16}
+        >
+          {loadedLetters.map((letter) => (
+            <View
+              key={letter}
+              onLayout={(e) => {
+                sectionOffsets.current[letter] = e.nativeEvent.layout.y;
+              }}
+            >
+              <View style={styles.letterHeader}>
+                <ThemedText style={styles.letterHeaderText}>{letter}</ThemedText>
+              </View>
+              {groupedBrands[letter].map((brand) => (
+                <TouchableOpacity
+                  key={brand.id}
+                  style={styles.brandItem}
+                  onPress={() => handleBrandPress(brand)}
+                  activeOpacity={0.9}
+                >
+                  {brand.logo ? (
+                    <Image source={imageSource(brand.logo)} style={styles.brandLogo} />
+                  ) : (
+                    <View style={[styles.brandLogo, styles.brandLogoPlaceholder]}>
+                      <ThemedText style={styles.brandLogoInitial}>
+                        {brand.displayName.charAt(0).toUpperCase()}
+                      </ThemedText>
+                    </View>
+                  )}
+                  <ThemedText style={styles.brandName}>{brand.displayName}</ThemedText>
+                  <ThemedText style={styles.brandChevron}>›</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+          {directoryQuery.isFetchingNextPage && (
+            <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -162,9 +273,9 @@ export default function ProfileScreen() {
         onCartPress={handleCartPress}
         onNotificationsPress={handleNotificationsPress}
       />
-      
-      <FeedTabs onTabChange={handleFeedTabChange} />
-      
+
+      <FeedTabs />
+
       {/* Shop Filter Toggle */}
       <View style={styles.shopFilterContainer}>
         <View style={styles.shopFilterToggle}>
@@ -183,7 +294,7 @@ export default function ProfileScreen() {
               Brands
             </ThemedText>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               styles.shopFilterButton,
@@ -201,60 +312,8 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      
-      {shopFilterMode === 'categories' ? (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          <View style={styles.categoriesContainer}>
-            {getCurrentCategories().map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => handleCategoryPress(category)}
-                activeOpacity={0.9}
-              >
-                <View style={styles.categoryContent}>
-                  <ThemedText style={styles.categoryTitle}>{category.name}</ThemedText>
-                  <Image source={category.image} style={styles.categoryImage} contentFit="contain" />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-      ) : (
-        <View style={styles.brandsContainer}>
-          {/* Alphabetical Index */}
-          <View style={styles.alphabetIndex}>
-            {alphabetLetters.map((letter) => (
-              <TouchableOpacity key={letter} style={styles.alphabetItem}>
-                <ThemedText style={styles.alphabetText}>{letter}</ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
-          
-          {/* Brands List */}
-          <ScrollView style={styles.brandsScrollView} showsVerticalScrollIndicator={false}>
-            {alphabetLetters.map((letter) => (
-              <View key={letter}>
-                <View style={styles.letterHeader}>
-                  <ThemedText style={styles.letterHeaderText}>{letter}</ThemedText>
-                </View>
-                {groupedBrands[letter].map((brand) => (
-                  <TouchableOpacity
-                    key={brand.id}
-                    style={styles.brandItem}
-                    onPress={() => handleBrandPress(brand)}
-                    activeOpacity={0.9}
-                  >
-                    <Image source={brand.logo} style={styles.brandLogo} />
-                    <ThemedText style={styles.brandName}>{brand.name}</ThemedText>
-                    <ThemedText style={styles.brandChevron}>›</ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+
+      {shopFilterMode === 'categories' ? renderCategoriesView() : renderBrandsView()}
     </ThemedView>
   );
 }
@@ -264,16 +323,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  content: {
+  placeholderContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingTop: 80,
+    paddingHorizontal: 40,
+    gap: 12,
   },
-  activeFilter: {
-    marginTop: 10,
-    color: '#666',
+  placeholderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  placeholderText: {
     fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  pagingSpinner: {
+    marginVertical: 16,
   },
   shopFilterContainer: {
     paddingHorizontal: 20,
@@ -293,7 +374,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 6,
-    transition: 'all 0.2s ease',
   },
   leftButton: {
     marginRight: 1,
@@ -360,6 +440,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 60,
     marginLeft: 16,
+    borderRadius: 8,
   },
   brandsContainer: {
     flex: 1,
@@ -382,6 +463,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontWeight: '500',
+  },
+  alphabetTextEmpty: {
+    color: '#ccc',
   },
   brandsScrollView: {
     flex: 1,
@@ -414,6 +498,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 16,
     backgroundColor: '#f5f5f5',
+  },
+  brandLogoPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e8e8e8',
+  },
+  brandLogoInitial: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#666',
   },
   brandName: {
     flex: 1,

@@ -1,8 +1,44 @@
-import { Product, CarouselProduct, ProductDetail, MerchantProfile } from './api-client';
+import { Product, CarouselProduct, Media, MerchantDetail } from './api-client';
+
+// Legacy prototype shape — predates the real GET /products/:id contract
+// (which lives as ProductDetail in api-client.ts). Only the screens still on
+// fixtures consume this; it disappears with them.
+export interface LegacyProductDetail {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  description: string | null;
+  category: string;
+  clothingType: string;
+  genderType: string;
+  size: string | null;
+  inventoryType: string;
+  leadTime: string | null;
+  media: Media[];
+  merchant: MerchantDetail;
+}
+
+// Legacy prototype merchant shape — predates the real GET /merchants/:username
+// contract (MerchantProfile in api-client.ts). Chat is the last consumer.
+export interface LegacyMerchantProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  bio: string | null;
+  location: string;
+  logo: string | null;
+  heroMedia: string[];
+  followerCount: number;
+  followingCount: number;
+  postCount: number;
+  isVerified: boolean;
+}
 
 // ─── MERCHANTS ────────────────────────────────────────────────────────────────
 
-export const DUMMY_MERCHANTS: Record<string, MerchantProfile> = {
+export const DUMMY_MERCHANTS: Record<string, LegacyMerchantProfile> = {
   suhu: {
     id: 'merchant-suhu',
     username: 'suhu',
@@ -41,13 +77,13 @@ export const DUMMY_MERCHANTS: Record<string, MerchantProfile> = {
   },
 };
 
-export function getDummyMerchant(username: string): MerchantProfile {
+export function getDummyMerchant(username: string): LegacyMerchantProfile {
   return DUMMY_MERCHANTS[username] ?? DUMMY_MERCHANTS.suhu;
 }
 
 // ─── PRODUCT DETAILS (keyed by productId) ─────────────────────────────────────
 
-export const DUMMY_PRODUCT_DETAILS: Record<string, ProductDetail> = {
+export const DUMMY_PRODUCT_DETAILS: Record<string, LegacyProductDetail> = {
   'suhu-golfer': {
     id: 'suhu-golfer',
     name: 'SUHU Eye Knitted Golfer',
@@ -309,7 +345,7 @@ export const DUMMY_PRODUCT_DETAILS: Record<string, ProductDetail> = {
   },
 };
 
-export function getDummyProductDetail(productId: string): ProductDetail {
+export function getDummyProductDetail(productId: string): LegacyProductDetail {
   return DUMMY_PRODUCT_DETAILS[productId] ?? DUMMY_PRODUCT_DETAILS['suhu-golfer'];
 }
 

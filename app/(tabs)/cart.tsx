@@ -2,31 +2,40 @@ import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   TouchableOpacity,
   View,
-  Text,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useCartStore } from '@/lib/cart-store';
-import { getLocalAsset } from '@/lib/local-assets';
+import { useCart, useRemoveCartItem, useUpdateCartItem } from '@/hooks/useCartQueries';
+import { useAuthStore } from '@/lib/auth-store';
+import { APIError, type ServerCartItem } from '@/lib/api-client';
+import { formatZAR } from '@/lib/format';
+import { imageSource } from '@/lib/image-source';
 
 export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { items, removeFromCart, updateQuantity, getCartTotal, getItemCount } = useCartStore();
+  const authStatus = useAuthStore((s) => s.state.status);
 
-  const cartTotal = getCartTotal();
-  const itemCount = getItemCount();
+  const cartQuery = useCart();
+  const updateItem = useUpdateCartItem();
+  const removeItem = useRemoveCartItem();
 
-  const handleBackPress = () => {
-    router.back();
-  };
+  const cart = cartQuery.data?.cart;
+  const items = cart?.items ?? [];
+  const itemCount = cart?.itemCount ?? 0;
+  const subtotal = cart?.subtotal ?? 0;
+
+  const handleBackPress = () => router.back();
 
   const handleCheckout = () => {
     if (items.length === 0) return;
@@ -34,21 +43,223 @@ export default function CartScreen() {
   };
 
   const handleRemoveItem = (itemId: string) => {
-    removeFromCart(itemId);
+    removeItem.mutate(itemId);
   };
 
-  const handleIncreaseQuantity = (itemId: string, currentQuantity: number) => {
-    updateQuantity(itemId, currentQuantity + 1);
+  const handleQuantityChange = (item: ServerCartItem, nextQuantity: number) => {
+    if (nextQuantity < 1) return;
+    updateItem.mutate(
+      { itemId: item.id, quantity: nextQuantity },
+      {
+        onError: (err) => {
+          if (err instanceof APIError && err.code === 'OUT_OF_STOCK') {
+            Alert.alert('Not enough stock', `Only ${item.stockCount} left of this item.`);
+          } else {
+            Alert.alert("Couldn't update quantity", 'Please try again.');
+          }
+        },
+      }
+    );
   };
 
-  const handleDecreaseQuantity = (itemId: string, currentQuantity: number) => {
-    if (currentQuantity > 1) {
-      updateQuantity(itemId, currentQuantity - 1);
+  const handleContinueShopping = () => router.push('/(tabs)');
+
+  const renderBody = () => {
+    // Guests sign in to buy (v1 — no guest server cart).
+    if (authStatus === 'guest') {
+      return (
+        <View style={styles.emptyCartContainer}>
+          <View style={styles.emptyCartIcon}>
+            <IconSymbol name="cart" size={80} color="#ccc" />
+          </View>
+          <ThemedText style={styles.emptyCartTitle}>Sign in to see your cart</ThemedText>
+          <ThemedText style={styles.emptyCartSubtitle}>
+            Your cart lives in your YIIVA account
+          </ThemedText>
+          <TouchableOpacity
+            style={styles.continueShoppingButton}
+            onPress={() => router.push('/auth/login')}
+          >
+            <ThemedText style={styles.continueShoppingButtonText}>Sign In</ThemedText>
+          </TouchableOpacity>
+        </View>
+      );
     }
-  };
 
-  const handleContinueShopping = () => {
-    router.push('/(tabs)');
+    if (cartQuery.isPending || authStatus === 'loading') {
+      return (
+        <View style={styles.emptyCartContainer}>
+          <ActivityIndicator size="large" color="#333" />
+        </View>
+      );
+    }
+
+    if (cartQuery.isError) {
+      return (
+        <View style={styles.emptyCartContainer}>
+          <ThemedText style={styles.emptyCartTitle}>Couldn&apos;t load your cart</ThemedText>
+          <TouchableOpacity
+            style={styles.continueShoppingButton}
+            onPress={() => cartQuery.refetch()}
+          >
+            <ThemedText style={styles.continueShoppingButtonText}>Retry</ThemedText>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (items.length === 0) {
+      return (
+        <View style={styles.emptyCartContainer}>
+          <View style={styles.emptyCartIcon}>
+            <IconSymbol name="cart" size={80} color="#ccc" />
+          </View>
+          <ThemedText style={styles.emptyCartTitle}>Your cart is empty</ThemedText>
+          <ThemedText style={styles.emptyCartSubtitle}>
+            Add items to your cart to get started
+          </ThemedText>
+          <TouchableOpacity style={styles.continueShoppingButton} onPress={handleContinueShopping}>
+            <ThemedText style={styles.continueShoppingButtonText}>Continue Shopping</ThemedText>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <>
+        {/* Cart Items */}
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={cartQuery.isRefetching}
+              onRefresh={() => cartQuery.refetch()}
+            />
+          }
+        >
+          {/* Item Count */}
+          <View style={styles.itemCountSection}>
+            <ThemedText style={styles.itemCountText}>
+              {itemCount} {itemCount === 1 ? 'item' : 'items'} in your cart
+            </ThemedText>
+          </View>
+
+          {/* Cart Items List */}
+          <View style={styles.cartItemsList}>
+            {items.map((item) => {
+              const imageAsset = imageSource(item.image);
+
+              return (
+                <View key={item.id} style={[styles.cartItem, !item.available && styles.cartItemUnavailable]}>
+                  {/* Product Image */}
+                  <TouchableOpacity
+                    style={styles.cartItemImage}
+                    onPress={() => router.push(`/product/${item.productId}`)}
+                  >
+                    {imageAsset ? (
+                      <Image source={imageAsset} style={styles.productImage} contentFit="cover" />
+                    ) : (
+                      <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                        <IconSymbol name="photo" size={24} color="#ccc" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Product Details */}
+                  <View style={styles.cartItemDetails}>
+                    <TouchableOpacity onPress={() => router.push(`/product/${item.productId}`)}>
+                      <ThemedText style={styles.productName} numberOfLines={2}>
+                        {item.name}
+                      </ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => router.push(`/artist/${item.merchant.username}`)}
+                    >
+                      <ThemedText style={styles.merchantName}>
+                        By {item.merchant.displayName}
+                      </ThemedText>
+                    </TouchableOpacity>
+                    {item.size && (
+                      <ThemedText style={styles.productSize}>Size: {item.size}</ThemedText>
+                    )}
+                    <ThemedText style={styles.productPrice}>
+                      {formatZAR(item.unitPrice)}
+                    </ThemedText>
+
+                    {!item.available && (
+                      <ThemedText style={styles.unavailableText}>
+                        No longer available
+                      </ThemedText>
+                    )}
+
+                    {/* Quantity Controls */}
+                    <View style={styles.quantityControls}>
+                      <TouchableOpacity
+                        style={styles.quantityButton}
+                        onPress={() => handleQuantityChange(item, item.quantity - 1)}
+                        disabled={updateItem.isPending || item.quantity <= 1}
+                      >
+                        <IconSymbol name="minus" size={16} color="#000" />
+                      </TouchableOpacity>
+                      <ThemedText style={styles.quantityText}>{item.quantity}</ThemedText>
+                      <TouchableOpacity
+                        style={styles.quantityButton}
+                        onPress={() => handleQuantityChange(item, item.quantity + 1)}
+                        disabled={updateItem.isPending || !item.available}
+                      >
+                        <IconSymbol name="plus" size={16} color="#000" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Remove Button */}
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => handleRemoveItem(item.id)}
+                    disabled={removeItem.isPending}
+                  >
+                    <IconSymbol name="trash" size={20} color="#ff3b30" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Order Summary */}
+          <View style={styles.orderSummarySection}>
+            <ThemedText style={styles.orderSummaryTitle}>Order Summary</ThemedText>
+            <View style={styles.summaryRow}>
+              <ThemedText style={styles.summaryLabel}>
+                Subtotal ({itemCount} {itemCount === 1 ? 'item' : 'items'})
+              </ThemedText>
+              <ThemedText style={styles.summaryValue}>{formatZAR(subtotal)}</ThemedText>
+            </View>
+            <View style={styles.summaryRow}>
+              <ThemedText style={styles.summaryLabel}>Shipping</ThemedText>
+              <ThemedText style={styles.summaryValue}>Calculated at checkout</ThemedText>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}>
+              <ThemedText style={styles.totalLabel}>Total</ThemedText>
+              <ThemedText style={styles.totalValue}>{formatZAR(subtotal)}</ThemedText>
+            </View>
+          </View>
+
+          {/* Bottom Padding */}
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+
+        {/* Fixed Checkout Button */}
+        <View style={[styles.fixedButtonSection, { paddingBottom: Math.max(insets.bottom, 16) + 60 }]}>
+          <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
+            <ThemedText style={styles.checkoutButtonText}>
+              PROCEED TO CHECKOUT - {formatZAR(subtotal)}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
   };
 
   return (
@@ -65,137 +276,7 @@ export default function CartScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Empty Cart State */}
-      {items.length === 0 ? (
-        <View style={styles.emptyCartContainer}>
-          <View style={styles.emptyCartIcon}>
-            <IconSymbol name="cart" size={80} color="#ccc" />
-          </View>
-          <ThemedText style={styles.emptyCartTitle}>Your cart is empty</ThemedText>
-          <ThemedText style={styles.emptyCartSubtitle}>
-            Add items to your cart to get started
-          </ThemedText>
-          <TouchableOpacity style={styles.continueShoppingButton} onPress={handleContinueShopping}>
-            <ThemedText style={styles.continueShoppingButtonText}>Continue Shopping</ThemedText>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          {/* Cart Items */}
-          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-            {/* Item Count */}
-            <View style={styles.itemCountSection}>
-              <ThemedText style={styles.itemCountText}>
-                {itemCount} {itemCount === 1 ? 'item' : 'items'} in your cart
-              </ThemedText>
-            </View>
-
-            {/* Cart Items List */}
-            <View style={styles.cartItemsList}>
-              {items.map((item) => {
-                const imageAsset = getLocalAsset(item.image);
-
-                return (
-                  <View key={item.id} style={styles.cartItem}>
-                    {/* Product Image */}
-                    <TouchableOpacity
-                      style={styles.cartItemImage}
-                      onPress={() => router.push(`/product/${item.productId}`)}
-                    >
-                      {imageAsset ? (
-                        <Image source={imageAsset} style={styles.productImage} contentFit="cover" />
-                      ) : (
-                        <View style={styles.imagePlaceholder}>
-                          <Text style={styles.imagePlaceholderText}>No image</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-
-                    {/* Product Details */}
-                    <View style={styles.cartItemDetails}>
-                      <TouchableOpacity onPress={() => router.push(`/product/${item.productId}`)}>
-                        <ThemedText style={styles.productName} numberOfLines={2}>
-                          {item.name}
-                        </ThemedText>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => router.push(`/artist/${item.merchant.username}`)}
-                      >
-                        <ThemedText style={styles.merchantName}>
-                          By {item.merchant.displayName}
-                        </ThemedText>
-                      </TouchableOpacity>
-                      {item.selectedSize && (
-                        <ThemedText style={styles.productSize}>Size: {item.selectedSize}</ThemedText>
-                      )}
-                      <ThemedText style={styles.productPrice}>
-                        {item.currency} {item.price.toFixed(2)}
-                      </ThemedText>
-
-                      {/* Quantity Controls */}
-                      <View style={styles.quantityControls}>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => handleDecreaseQuantity(item.id, item.quantity)}
-                        >
-                          <IconSymbol name="minus" size={16} color="#000" />
-                        </TouchableOpacity>
-                        <ThemedText style={styles.quantityText}>{item.quantity}</ThemedText>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => handleIncreaseQuantity(item.id, item.quantity)}
-                        >
-                          <IconSymbol name="plus" size={16} color="#000" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {/* Remove Button */}
-                    <TouchableOpacity
-                      style={styles.removeButton}
-                      onPress={() => handleRemoveItem(item.id)}
-                    >
-                      <IconSymbol name="trash" size={20} color="#ff3b30" />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Order Summary */}
-            <View style={styles.orderSummarySection}>
-              <ThemedText style={styles.orderSummaryTitle}>Order Summary</ThemedText>
-              <View style={styles.summaryRow}>
-                <ThemedText style={styles.summaryLabel}>
-                  Subtotal ({itemCount} {itemCount === 1 ? 'item' : 'items'})
-                </ThemedText>
-                <ThemedText style={styles.summaryValue}>R{cartTotal.toFixed(2)}</ThemedText>
-              </View>
-              <View style={styles.summaryRow}>
-                <ThemedText style={styles.summaryLabel}>Shipping</ThemedText>
-                <ThemedText style={styles.summaryValue}>Calculated at checkout</ThemedText>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryRow}>
-                <ThemedText style={styles.totalLabel}>Total</ThemedText>
-                <ThemedText style={styles.totalValue}>R{cartTotal.toFixed(2)}</ThemedText>
-              </View>
-            </View>
-
-            {/* Bottom Padding */}
-            <View style={styles.bottomPadding} />
-          </ScrollView>
-
-          {/* Fixed Checkout Button */}
-          <View style={[styles.fixedButtonSection, { paddingBottom: Math.max(insets.bottom, 16) + 60 }]}>
-            <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
-              <ThemedText style={styles.checkoutButtonText}>
-                PROCEED TO CHECKOUT - R{cartTotal.toFixed(2)}
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
+      {renderBody()}
     </ThemedView>
   );
 }
@@ -430,5 +511,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
+  },
+  cartItemUnavailable: {
+    opacity: 0.6,
+  },
+  productImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  unavailableText: {
+    fontSize: 13,
+    color: '#b3261e',
+    fontWeight: '600',
+    marginBottom: 8,
   },
 });

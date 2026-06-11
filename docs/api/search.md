@@ -10,14 +10,24 @@
 
 | § | Endpoint | Method | Auth | Status | Used by |
 |---|---|---|---|---|---|
-| 1 | `/search` | GET | optional | 🟡 | Search screen |
-| 2 | `/search/category` | GET | optional | 🟡 | Search, Explore |
-| 3 | `/search/smart-category` | GET | optional | 🟡 | Explore |
-| 4 | `/search/merchant` | GET | optional | 🟡 | Search (when filtering by brand name) |
-| 5 | `/search/suggestions` | GET | none | 🔴 | Search screen (Trending + autocomplete) |
-| 6 | `/search/track` | POST | optional | 🔴 | Search screen (analytics) |
+| 1 | `/search` | GET | optional | ✅ | Search screen |
+| 2 | `/search/category` | GET | optional | ✅ | Search, Explore |
+| 3 | `/search/smart-category` | GET | optional | ✅ | Explore |
+| 4 | `/search/merchant` | GET | optional | ✅ | Search (when filtering by brand name) |
+| 5 | `/search/suggestions` | GET | none | ✅ | Search screen (Trending + autocomplete) |
+| 6 | `/search/track` | POST | optional | ✅ | Search screen (analytics) |
 
 Status: ✅ implemented · 🟡 proposed (already in `lib/api-client.ts`) · 🔴 proposed (new)
+
+> **Implemented in nuwa under `/api/search`.** §1-§4 reuse the feed-grid query
+> (same product card shape, cursor pagination, personalised flags). **v1 ranking
+> = SQL `ILIKE contains` + recency** — real relevance/ranking is a **Phalo**
+> concern (the future analytics engine), as is the `suggestions` trending signal
+> (v1 = top `Tag`s by `usageCount`). **smartCategories map to nuwa `Tag`s, which
+> are sparse until the AI-tagging worker runs** — expect thin smart-category
+> results for now. `q` min length 1. `track` writes a raw `AnalyticsEvent`
+> (returns `{ recorded: true }`, 200, not 204). Autocomplete `suggestions[]`
+> deferred. Merchant-card-in-results (SR-7) deferred to v2.
 
 ---
 
@@ -39,7 +49,7 @@ Personalised fields (`isLikedByMe`, etc.) follow the standard rules in [`../api-
 
 ---
 
-## 1. Universal search 🟡
+## 1. Universal search ✅
 
 The default search endpoint used by the Search screen. Searches across product name, category, clothingType, smartCategories, and merchant name.
 
@@ -80,7 +90,7 @@ See [open-questions §SR-1 through §SR-10](../open-questions.md#search-screen--
 
 ---
 
-## 2. Search by category 🟡
+## 2. Search by category ✅
 
 Narrower scope — searches only category + clothingType fields.
 
@@ -109,7 +119,7 @@ Standard.
 
 ---
 
-## 3. Search by smart category 🟡
+## 3. Search by smart category ✅
 
 Narrows to AI-generated `smartCategory1-3` tags.
 
@@ -134,7 +144,7 @@ Shared shape.
 
 ---
 
-## 4. Search by merchant name 🟡
+## 4. Search by merchant name ✅
 
 For users who type a brand name and want product results from that brand.
 
@@ -159,7 +169,7 @@ Shared shape.
 
 ---
 
-## 5. Search suggestions 🔴
+## 5. Search suggestions ✅
 
 Trending queries + (optionally) autocomplete for the current `q`.
 
@@ -210,7 +220,7 @@ Standard. Response is highly cacheable; `Cache-Control: public, max-age=3600` re
 
 ---
 
-## 6. Track search query 🔴
+## 6. Track search query ✅
 
 Optional analytics signal — records that a user performed a search. Feeds ranking improvements.
 

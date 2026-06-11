@@ -8,6 +8,18 @@ All endpoints in this domain are **🔴 proposed (new)**. The current mobile imp
 
 > **Realtime mechanism is the largest single architecture decision.** Mobile vote: REST polling at 10s intervals for v1; WebSocket via Pusher / Ably / a backend-managed channel for v2. See [`../open-questions.md` §CH-1](../open-questions.md#ch-1--realtime-mechanism).
 
+> ✅ **CH-1 decided: real-time via WebSocket (socket.io), self-hosted in nuwa.**
+> Architecture = **REST writes + WS fan-out**: REST owns the durable operations
+> (persist/paginate/authz), the socket.io `/chat` namespace pushes
+> `message:new` / `read` events to connected participants — **no polling needed.**
+> JWT is verified on the handshake; clients emit `join { conversationId }` then
+> receive events. Both the buyer app and the **merchant dashboard** use the same
+> REST core (merchant surface lives at `/stores/:storeId/conversations`).
+> v1 notes: `messagingEnabled` always true (no per-store toggle), `avgResponseTime`
+> null (no data yet), message `status` always `'sent'` (read receipts are v2 —
+> read state is per-conversation via lastReadAt). Attachments are **image-only**
+> in v1 (product cards v2).
+
 ---
 
 ## Endpoints
@@ -58,7 +70,7 @@ All endpoints in this domain are **🔴 proposed (new)**. The current mobile imp
 
 ---
 
-## 1. Get or create conversation 🔴
+## 1. Get or create conversation ✅
 
 ```
 GET /conversations/by-merchant/{username}
@@ -116,7 +128,7 @@ Standard.
 
 ---
 
-## 2. Get messages 🔴
+## 2. Get messages ✅
 
 ```
 GET /conversations/{conversationId}/messages
@@ -157,7 +169,7 @@ GET /conversations/{conversationId}/messages
 
 ---
 
-## 3. Send message 🔴
+## 3. Send message ✅
 
 ```
 POST /conversations/{conversationId}/messages
@@ -208,7 +220,7 @@ Returns the created message (server-assigned `id` + `createdAt`).
 
 ---
 
-## 4. Mark read 🔴
+## 4. Mark read ✅
 
 ```
 PATCH /conversations/{conversationId}/read
@@ -234,7 +246,15 @@ Mobile ignores all errors (fire-and-forget).
 
 ---
 
-## 5. Upload attachment 🔴
+## 5. Upload attachment ✅ (via signed-direct Cloudinary, not multipart)
+
+> Chat images use nuwa's **signed-direct Cloudinary flow** (consistent with the
+> rest of the app — backend never touches the file), NOT a multipart upload to
+> this path. Client: `POST /uploads/cloudinary-signature` with
+> `uploadContext: "chat_attachment"` → upload direct to Cloudinary → include
+> `{ type:'image', url, thumbnailUrl?, width?, height? }` in the message's
+> `attachments`. Send validates the URL is a Cloudinary URL. (Requires a
+> `chat_attachment` signed preset in the Cloudinary dashboard.)
 
 ```
 POST /conversations/{conversationId}/upload
@@ -277,7 +297,7 @@ POST /conversations/{conversationId}/upload
 
 ---
 
-## 6. Report conversation 🔴
+## 6. Report conversation ✅
 
 ```
 POST /conversations/{conversationId}/report

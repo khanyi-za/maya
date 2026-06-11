@@ -13,10 +13,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from './ui/IconSymbol';
 import { useRouter } from 'expo-router';
+import { useAuthStore } from '@/lib/auth-store';
+import { logout } from '@/lib/auth';
 
 interface SideMenuProps {
   visible: boolean;
   onClose: () => void;
+  /** Fallback display name; the auth store's user wins when signed in. */
   userName?: string;
 }
 
@@ -27,6 +30,9 @@ export function SideMenu({ visible, onClose, userName = 'Guest' }: SideMenuProps
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const authState = useAuthStore((s) => s.state);
+  const isAuthenticated = authState.status === 'authenticated';
+  const displayName = isAuthenticated ? authState.user.firstName : userName;
 
   React.useEffect(() => {
     if (visible) {
@@ -80,7 +86,7 @@ export function SideMenu({ visible, onClose, userName = 'Guest' }: SideMenuProps
           >
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.greeting}>Hello, <Text style={styles.userName}>{userName}</Text></Text>
+              <Text style={styles.greeting}>Hello, <Text style={styles.userName}>{displayName}</Text></Text>
             </View>
 
             {/* Menu Items */}
@@ -122,14 +128,22 @@ export function SideMenu({ visible, onClose, userName = 'Guest' }: SideMenuProps
                 onPress={() => handleNavigation('/gift-voucher')}
               />
 
-              <MenuItem
-                icon="rectangle.portrait.and.arrow.right"
-                label="Sign out"
-                onPress={() => {
-                  onClose();
-                  console.log('Sign out pressed');
-                }}
-              />
+              {isAuthenticated ? (
+                <MenuItem
+                  icon="rectangle.portrait.and.arrow.right"
+                  label="Sign out"
+                  onPress={() => {
+                    onClose();
+                    void logout();
+                  }}
+                />
+              ) : (
+                <MenuItem
+                  icon="person.crop.circle"
+                  label="Sign in"
+                  onPress={() => handleNavigation('/auth/login')}
+                />
+              )}
 
               <MenuItem
                 icon="questionmark.circle"

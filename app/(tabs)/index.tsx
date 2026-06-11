@@ -8,10 +8,23 @@ import { YiivaHeader } from '@/components/YiivaHeader';
 import { SideMenu } from '@/components/SideMenu';
 import { useFilter } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
-import { getLocalAsset } from '@/lib/local-assets';
-import { DUMMY_FEED_PRODUCTS, DUMMY_CAROUSEL_PRODUCTS } from '@/lib/dummy-data';
-import React, { useState } from 'react';
+import { resolveBookmarked, resolveFollowed, useServerSocial } from '@/lib/server-social';
+import { useRequireAuth, useToggleBookmark, useToggleFollow } from '@/hooks/useSocialMutations';
+import { imageSource } from '@/lib/image-source';
+import { formatZAR } from '@/lib/format';
 import {
+  useCategories,
+  useNewArrivals,
+  useProductFeed,
+  useTrendingMerchants,
+} from '@/hooks/useHomeQueries';
+import type { GenderType, Product } from '@/lib/api-client';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -27,33 +40,252 @@ export default function HomeScreen() {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('All');
 
-  const { toggleLike, toggleBookmark, isLiked, isBookmarked, toggleFollow, isFollowing } = useSocialStore();
+  // Likes stay local-only in v1; bookmarks + follows are server-backed.
+  const { toggleLike, isLiked } = useSocialStore();
+  const { bookmarked, followed } = useServerSocial();
+  const toggleBookmark = useToggleBookmark();
+  const toggleFollow = useToggleFollow();
+  const requireAuth = useRequireAuth();
 
-  const trendingBrands = [
-    {
-      id: 'merchant-1',
-      username: 'tol_thema',
-      displayName: "Tol'thema",
-      logo: { url: "/demo-assets/tol_thema/tol'thema-logo.png" },
-    },
-    {
-      id: 'merchant-2',
-      username: 'suhu',
-      displayName: 'SUHU',
-      logo: { url: '/demo-assets/suhu/suhu-logo.png' },
-    },
-  ];
+  // 'home-lifestyle' has no backend taxonomy yet (open-questions §P-4) —
+  // queries stay disabled and the tab renders a placeholder.
+  const gender: GenderType | null =
+    activePrimaryFilter === 'home-lifestyle' ? null : activePrimaryFilter;
+
+  const feedQuery = useProductFeed(
+    gender,
+    activeCategory === 'All' ? undefined : activeCategory
+  );
+  const newArrivalsQuery = useNewArrivals(gender);
+  const trendingQuery = useTrendingMerchants(gender);
+  const categoriesQuery = useCategories(gender);
+
+  const products: Product[] =
+    feedQuery.data?.pages.flatMap((page) => page.products) ?? [];
 
   const handleMenuPress = () => setIsMenuVisible(true);
   const handleCartPress = () => router.push('/cart');
   const handleNotificationsPress = () => console.log('Notifications pressed');
-  const handleCategoryChange = (category: string) => setActiveCategory(category);
-  const handleBookmark = (productId: string) => toggleBookmark(productId);
+  const handleCategoryChange = useCallback(
+    (category: string) => setActiveCategory(category),
+    []
+  );
+  const handleBookmark = (product: Product) => {
+    if (!requireAuth()) return;
+    toggleBookmark(
+      product.id,
+      resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)
+    );
+  };
   const handleLike = (productId: string) => toggleLike(productId);
-  const handleFeedTabChange = (tab: 'men' | 'women' | 'home-lifestyle') => console.log('Feed tab changed to:', tab);
   const handleSeeAll = (_title: string) => router.push('/explore');
   const handleBrandPress = (username: string) => router.push(`/artist/${username}`);
-  const handleFollowPress = (brandId: string) => toggleFollow(brandId);
+
+  const handleRefresh = useCallback(() => {
+    feedQuery.refetch();
+    newArrivalsQuery.refetch();
+    trendingQuery.refetch();
+    categoriesQuery.refetch();
+  }, [feedQuery, newArrivalsQuery, trendingQuery, categoriesQuery]);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const nearBottom =
+      contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
+    if (nearBottom && feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
+      feedQuery.fetchNextPage();
+    }
+  };
+
+  const trendingBrands = trendingQuery.data?.merchants ?? [];
+  const newArrivals = newArrivalsQuery.data?.products ?? [];
+
+  const renderGridRow = (rowProducts: Product[], key: string) => (
+    <View key={key} style={styles.gridRow}>
+      {rowProducts.map((product) => (
+        <View key={product.id} style={styles.gridItem}>
+          <ProductCard
+            productImage={imageSource(product.primaryImage)}
+            profileImage={imageSource(product.merchant.logo)}
+            artistName={product.merchant.displayName}
+            productTitle={product.name}
+            price={formatZAR(product.price)}
+            location={`${product.merchant.username}`}
+            productId={product.id}
+            artistId={product.merchant.username}
+            onBookmark={() => handleBookmark(product)}
+            onLike={() => handleLike(product.id)}
+            isLiked={isLiked(product.id)}
+            isBookmarked={resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)}
+          />
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderTrendingBrands = () => (
+    <View key="trending-brands" style={styles.brandsSection}>
+      <View style={styles.brandsSectionHeader}>
+        <ThemedText style={styles.brandsSectionTitle}>Trending Brands</ThemedText>
+        <TouchableOpacity onPress={() => router.push('/explore')}>
+          <ThemedText style={styles.seeAllText}>See All</ThemedText>
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.brandsContainer}
+      >
+        {trendingBrands.map((brand) => {
+          const isFollowingBrand = resolveFollowed(
+            followed,
+            brand.id,
+            brand.isFollowedByMe
+          );
+          return (
+          <TouchableOpacity
+            key={brand.id}
+            style={styles.brandCard}
+            onPress={() => handleBrandPress(brand.username)}
+            activeOpacity={0.9}
+          >
+            {brand.logo ? (
+              <Image source={imageSource(brand.logo)} style={styles.brandLogo} />
+            ) : (
+              <View style={[styles.brandLogo, styles.brandPlaceholder]}>
+                <ThemedText style={styles.brandInitial}>
+                  {brand.displayName.charAt(0).toUpperCase()}
+                </ThemedText>
+              </View>
+            )}
+            <ThemedText style={styles.brandName} numberOfLines={1}>
+              {brand.displayName}
+            </ThemedText>
+            <TouchableOpacity
+              style={[
+                styles.followButton,
+                isFollowingBrand && styles.followingButton,
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                if (!requireAuth()) return;
+                toggleFollow(brand.id, isFollowingBrand);
+              }}
+            >
+              <ThemedText
+                style={[
+                  styles.followButtonText,
+                  isFollowingBrand && styles.followingButtonText,
+                ]}
+              >
+                {isFollowingBrand ? 'Following' : 'Follow'}
+              </ThemedText>
+            </TouchableOpacity>
+          </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
+  const renderNewArrivals = () => (
+    <RowProductList
+      key="new-arrivals"
+      title="New Arrivals"
+      products={newArrivals.map((p) => ({
+        id: p.id,
+        image: imageSource(p.image),
+        title: p.name,
+        artistName: p.merchant.displayName,
+        price: formatZAR(p.price),
+      }))}
+      onSeeAll={() => handleSeeAll('New Arrivals')}
+    />
+  );
+
+  // Grid rows of 2, with the New Arrivals carousel after row 3 and Trending
+  // Brands after row 6 (or at the end of a shorter feed).
+  const renderFeed = () => {
+    const content: React.ReactNode[] = [];
+    const rows: Product[][] = [];
+    for (let i = 0; i < products.length; i += 2) {
+      rows.push(products.slice(i, i + 2));
+    }
+
+    rows.forEach((rowProducts, rowIndex) => {
+      content.push(renderGridRow(rowProducts, `row-${rowIndex}`));
+      if (rowIndex === 2 && newArrivals.length > 0) {
+        content.push(renderNewArrivals());
+      }
+      if (rowIndex === 5 && trendingBrands.length > 0) {
+        content.push(renderTrendingBrands());
+      }
+    });
+
+    // Shorter feeds still get the carousels, appended after the grid.
+    if (rows.length <= 2 && newArrivals.length > 0) {
+      content.push(renderNewArrivals());
+    }
+    if (rows.length <= 5 && trendingBrands.length > 0) {
+      content.push(renderTrendingBrands());
+    }
+
+    return content;
+  };
+
+  const renderBody = () => {
+    if (gender === null) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ThemedText style={styles.placeholderTitle}>Coming soon</ThemedText>
+          <ThemedText style={styles.placeholderText}>
+            Home & Lifestyle is on its way. Check back shortly.
+          </ThemedText>
+        </View>
+      );
+    }
+
+    if (feedQuery.isPending) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ActivityIndicator size="large" color="#333" />
+        </View>
+      );
+    }
+
+    if (feedQuery.isError) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ThemedText style={styles.placeholderTitle}>
+            Couldn&apos;t load the feed
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={() => feedQuery.refetch()}>
+            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (products.length === 0) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ThemedText style={styles.placeholderTitle}>Nothing here yet</ThemedText>
+          <ThemedText style={styles.placeholderText}>
+            No products match this view. Try another tab or category.
+          </ThemedText>
+        </View>
+      );
+    }
+
+    return (
+      <ThemedView style={styles.feed}>
+        {renderFeed()}
+        {feedQuery.isFetchingNextPage && (
+          <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+        )}
+      </ThemedView>
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -69,163 +301,28 @@ export default function HomeScreen() {
         onNotificationsPress={handleNotificationsPress}
       />
 
-      <FeedTabs onTabChange={handleFeedTabChange} />
+      <FeedTabs />
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <CategoryFilter
-          onCategoryChange={handleCategoryChange}
-          primaryFilter={activePrimaryFilter}
-        />
-
-        <ThemedView style={styles.feed}>
-          {(() => {
-            const products = DUMMY_FEED_PRODUCTS;
-            const content = [];
-            let productIndex = 0;
-
-            const createGridRow = (startIndex: number) => {
-              const rowProducts = [];
-              for (let i = 0; i < 2 && startIndex + i < products.length; i++) {
-                const product = products[startIndex + i];
-                const productImage = getLocalAsset(product.primaryImage);
-                const merchantLogo = product.merchant.logo ? getLocalAsset(product.merchant.logo) : undefined;
-
-                rowProducts.push(
-                  <View key={product.id} style={styles.gridItem}>
-                    <ProductCard
-                      productImage={productImage || { uri: product.primaryImage }}
-                      profileImage={merchantLogo}
-                      artistName={product.merchant.displayName}
-                      productTitle={product.name}
-                      price={`R${product.price.toFixed(2)}`}
-                      location={`${product.merchant.username}`}
-                      productId={product.id}
-                      artistId={product.merchant.username}
-                      onBookmark={() => handleBookmark(product.id)}
-                      onLike={() => handleLike(product.id)}
-                      isLiked={isLiked(product.id)}
-                      isBookmarked={isBookmarked(product.id)}
-                    />
-                  </View>
-                );
-              }
-              return rowProducts;
-            };
-
-            // First 3 rows (6 products)
-            for (let row = 0; row < 3 && productIndex < products.length; row++) {
-              content.push(
-                <View key={`row-${row}`} style={styles.gridRow}>
-                  {createGridRow(productIndex)}
-                </View>
-              );
-              productIndex += 2;
-            }
-
-            // New Arrivals after row 3
-            if (productIndex >= 6) {
-              content.push(
-                <RowProductList
-                  key="new-arrivals"
-                  title="New Arrivals"
-                  products={DUMMY_CAROUSEL_PRODUCTS.map(p => {
-                    const localImage = getLocalAsset(p.image);
-                    return {
-                      id: p.id,
-                      image: localImage || { uri: p.image },
-                      title: p.name,
-                      artistName: p.merchant.displayName,
-                      price: `R${p.price.toFixed(2)}`,
-                    };
-                  })}
-                  onSeeAll={() => handleSeeAll('New Arrivals')}
-                />
-              );
-            }
-
-            // Next 3 rows
-            for (let row = 0; row < 3 && productIndex < products.length; row++) {
-              content.push(
-                <View key={`row-${row + 3}`} style={styles.gridRow}>
-                  {createGridRow(productIndex)}
-                </View>
-              );
-              productIndex += 2;
-            }
-
-            // Trending Brands
-            if (productIndex >= 12 && trendingBrands.length > 0) {
-              content.push(
-                <View key="trending-brands" style={styles.brandsSection}>
-                  <View style={styles.brandsSectionHeader}>
-                    <ThemedText style={styles.brandsSectionTitle}>Trending Brands</ThemedText>
-                    <TouchableOpacity onPress={() => router.push('/explore')}>
-                      <ThemedText style={styles.seeAllText}>See All</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.brandsContainer}
-                  >
-                    {trendingBrands.map((brand) => (
-                      <TouchableOpacity
-                        key={brand.id}
-                        style={styles.brandCard}
-                        onPress={() => handleBrandPress(brand.username)}
-                        activeOpacity={0.9}
-                      >
-                        {brand.logo ? (
-                          <Image source={getLocalAsset(brand.logo.url)} style={styles.brandLogo} />
-                        ) : (
-                          <View style={[styles.brandLogo, styles.brandPlaceholder]}>
-                            <ThemedText style={styles.brandInitial}>
-                              {brand.displayName.charAt(0).toUpperCase()}
-                            </ThemedText>
-                          </View>
-                        )}
-                        <ThemedText style={styles.brandName} numberOfLines={1}>
-                          {brand.displayName}
-                        </ThemedText>
-                        <TouchableOpacity
-                          style={[
-                            styles.followButton,
-                            isFollowing(brand.id) && styles.followingButton,
-                          ]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleFollowPress(brand.id);
-                          }}
-                        >
-                          <ThemedText
-                            style={[
-                              styles.followButtonText,
-                              isFollowing(brand.id) && styles.followingButtonText,
-                            ]}
-                          >
-                            {isFollowing(brand.id) ? 'Following' : 'Follow'}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              );
-            }
-
-            // Remaining products
-            while (productIndex < products.length) {
-              content.push(
-                <View key={`row-remaining-${productIndex}`} style={styles.gridRow}>
-                  {createGridRow(productIndex)}
-                </View>
-              );
-              productIndex += 2;
-            }
-
-            return content;
-          })()}
-        </ThemedView>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={gender !== null && feedQuery.isRefetching}
+            onRefresh={handleRefresh}
+          />
+        }
+      >
+        {gender !== null && (
+          <CategoryFilter
+            onCategoryChange={handleCategoryChange}
+            primaryFilter={activePrimaryFilter}
+            categories={categoriesQuery.data?.categories ?? []}
+          />
+        )}
+        {renderBody()}
       </ScrollView>
     </ThemedView>
   );
@@ -242,6 +339,38 @@ const styles = StyleSheet.create({
   feed: {
     paddingTop: 20,
     paddingBottom: 100,
+  },
+  placeholderContainer: {
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  placeholderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  pagingSpinner: {
+    marginVertical: 16,
   },
   gridRow: {
     flexDirection: 'row',

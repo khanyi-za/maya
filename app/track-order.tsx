@@ -1,16 +1,26 @@
-import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useCartStore } from '@/lib/cart-store';
-import { getLocalAsset } from '@/lib/local-assets';
+import { useCancelOrder, useOrder, useOrderTracking } from '@/hooks/useOrderQueries';
+import { APIError, type MobileOrderStatus } from '@/lib/api-client';
+import { formatZAR } from '@/lib/format';
+import { imageSource } from '@/lib/image-source';
 
-interface OrderStatus {
-  step: number;
+interface TimelineStep {
   title: string;
   description: string;
   completed: boolean;
@@ -18,124 +28,186 @@ interface OrderStatus {
   timestamp?: string;
 }
 
+function formatDateTime(iso: string | undefined | null): string | undefined {
+  if (!iso) return undefined;
+  const date = new Date(iso);
+  return date.toLocaleDateString('en-ZA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }) + ' at ' + date.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
+
+function buildTimeline(
+  status: MobileOrderStatus,
+  statusHistory: { status: string; at: string }[]
+): TimelineStep[] {
+  const at = (s: string) => statusHistory.find((h) => h.status === s)?.at;
+
+  const confirmedDone = ['CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED'].includes(status);
+  const shippedDone = ['SHIPPED', 'DELIVERED'].includes(status);
+  const deliveredDone = status === 'DELIVERED';
+
+  const steps: TimelineStep[] = [
+    {
+      title: 'Order Placed',
+      description: 'Your order has been received',
+      completed: true,
+      current: false,
+      timestamp: formatDateTime(at('PENDING_PAYMENT')),
+    },
+    {
+      title: 'Order Confirmed',
+      description: 'Payment confirmed — the brand is preparing your order',
+      completed: confirmedDone,
+      current: false,
+      timestamp: formatDateTime(at('CONFIRMED')),
+    },
+    {
+      title: 'Shipped',
+      description: 'Your order is on its way to you',
+      completed: shippedDone,
+      current: false,
+      timestamp: formatDateTime(at('SHIPPED')),
+    },
+    {
+      title: 'Delivered',
+      description: 'Order successfully delivered',
+      completed: deliveredDone,
+      current: false,
+      timestamp: formatDateTime(at('DELIVERED')),
+    },
+  ];
+
+  const firstIncomplete = steps.find((s) => !s.completed);
+  if (firstIncomplete) firstIncomplete.current = true;
+  return steps;
+}
+
 export default function TrackOrderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { items, getCartTotal, getItemCount } = useCartStore();
+  const { orderId } = useLocalSearchParams<{ orderId?: string }>();
 
-  const handleClosePress = () => {
-    router.push('/(tabs)/');
+  const orderQuery = useOrder(orderId);
+  const trackingQuery = useOrderTracking(orderId);
+  const cancelMutation = useCancelOrder();
+
+  const order = orderQuery.data?.order;
+  const tracking = trackingQuery.data?.tracking;
+  const trackingPending =
+    trackingQuery.isError &&
+    trackingQuery.error instanceof APIError &&
+    trackingQuery.error.status === 404;
+
+  const handleClosePress = () => router.dismissTo('/(tabs)');
+
+  const handleContactBrand = () => {
+    const username = order?.items[0]?.merchant.username;
+    if (username) router.push(`/chat/${username}`);
   };
 
-  const handleContactArtist = () => {
-    console.log('Contact artist');
-    // Navigate to chat or contact page
+  const canCancel =
+    !!order &&
+    (order.status === 'PENDING_PAYMENT' ||
+      (order.status === 'CONFIRMED' &&
+        !!order.cancellationEligibleUntil &&
+        new Date(order.cancellationEligibleUntil) > new Date()));
+
+  const handleCancelOrder = () => {
+    if (!orderId) return;
+    Alert.alert('Cancel this order?', 'This can’t be undone.', [
+      { text: 'Keep order', style: 'cancel' },
+      {
+        text: 'Cancel order',
+        style: 'destructive',
+        onPress: () =>
+          cancelMutation.mutate(
+            { orderId, reason: 'CHANGED_MIND' },
+            {
+              onError: () =>
+                Alert.alert("Couldn't cancel", 'The order may already be processing.'),
+            }
+          ),
+      },
+    ]);
   };
 
-  const handleViewOrderDetails = () => {
-    console.log('View order details');
-    // Navigate to full order details
-  };
+  // ── Loading / error states ──
 
-  const handleUpdateNotifications = () => {
-    console.log('Update notifications');
-    // Navigate to notification settings
-  };
-
-  // Generate order number
-  const orderNumber = `YV${Date.now().toString().slice(-6)}`;
-
-  // Calculate totals
-  const subtotal = getCartTotal();
-  const shippingFee = subtotal >= 650 ? 0 : 65;
-  const tax = subtotal * 0.15;
-  const total = subtotal + shippingFee + tax;
-
-  // Order info derived from cart
-  const orderInfo = {
-    orderNumber: `#${orderNumber}`,
-    total: `R${total.toFixed(2)}`,
-    itemCount: getItemCount(),
-    estimatedDelivery: 'Feb 15, 2024',
-    shippingAddress: '123 Long Street, Cape Town, 8001'
-  };
-
-  const orderStatuses: OrderStatus[] = [
-    {
-      step: 1,
-      title: 'Order Placed',
-      description: 'Your order has been received and confirmed',
-      completed: true,
-      current: false,
-      timestamp: 'Jan 15, 2024 at 2:30 PM'
-    },
-    {
-      step: 2,
-      title: 'Order Confirmed',
-      description: 'Artist has accepted your order and is creating your item',
-      completed: true,
-      current: false,
-      timestamp: 'Jan 15, 2024 at 3:45 PM'
-    },
-    {
-      step: 3,
-      title: 'Shipped',
-      description: 'Your order is on its way to you',
-      completed: false,
-      current: true,
-      timestamp: 'Expected Jan 29, 2024'
-    },
-    {
-      step: 4,
-      title: 'Delivered',
-      description: 'Order successfully delivered',
-      completed: false,
-      current: false
-    }
-  ];
-
-  const renderStatusStep = (status: OrderStatus, index: number) => {
-    const isLast = index === orderStatuses.length - 1;
-    
+  if (!orderId || orderQuery.isError || (orderQuery.isSuccess && !order)) {
+    const notFound =
+      !orderId ||
+      (orderQuery.error instanceof APIError && orderQuery.error.status === 404);
     return (
-      <View key={status.step} style={styles.statusStep}>
+      <ThemedView style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <ThemedText style={styles.stateTitle}>
+            {notFound ? "We couldn't find that order" : "Couldn't load your order"}
+          </ThemedText>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => (notFound ? handleClosePress() : orderQuery.refetch())}
+          >
+            <ThemedText style={styles.primaryButtonText}>
+              {notFound ? 'Browse YIIVA' : 'Retry'}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (orderQuery.isPending || !order) {
+    return (
+      <ThemedView style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color="#333" />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  const timeline = buildTimeline(order.status, order.statusHistory);
+  const address = order.shipping.address;
+  const estimatedDelivery =
+    tracking?.estimatedDeliveryTo ?? order.shipping.estimatedDelivery;
+
+  const renderStatusStep = (step: TimelineStep, index: number) => {
+    const isLast = index === timeline.length - 1;
+
+    return (
+      <View key={step.title} style={styles.statusStep}>
         <View style={styles.statusIndicatorContainer}>
-          <View style={[
-            styles.statusIndicator,
-            status.completed && styles.completedIndicator,
-            status.current && styles.currentIndicator
-          ]}>
-            {status.completed ? (
+          <View
+            style={[
+              styles.statusIndicator,
+              step.completed && styles.completedIndicator,
+              step.current && styles.currentIndicator,
+            ]}
+          >
+            {step.completed ? (
               <IconSymbol name="checkmark" size={16} color="#fff" />
             ) : (
-              <View style={[
-                styles.statusDot,
-                status.current && styles.currentDot
-              ]} />
+              <View style={[styles.statusDot, step.current && styles.currentDot]} />
             )}
           </View>
           {!isLast && (
-            <View style={[
-              styles.statusLine,
-              status.completed && styles.completedLine
-            ]} />
+            <View style={[styles.statusLine, step.completed && styles.completedLine]} />
           )}
         </View>
-        
+
         <View style={styles.statusContent}>
-          <ThemedText style={[
-            styles.statusTitle,
-            status.current && styles.currentStatusTitle
-          ]}>
-            {status.title}
+          <ThemedText
+            style={[styles.statusTitle, step.current && styles.currentStatusTitle]}
+          >
+            {step.title}
           </ThemedText>
-          <ThemedText style={styles.statusDescription}>
-            {status.description}
-          </ThemedText>
-          {status.timestamp && (
-            <ThemedText style={styles.statusTimestamp}>
-              {status.timestamp}
-            </ThemedText>
+          <ThemedText style={styles.statusDescription}>{step.description}</ThemedText>
+          {step.timestamp && (
+            <ThemedText style={styles.statusTimestamp}>{step.timestamp}</ThemedText>
           )}
         </View>
       </View>
@@ -146,7 +218,7 @@ export default function TrackOrderScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerSpacer} />
@@ -156,24 +228,34 @@ export default function TrackOrderScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={orderQuery.isRefetching}
+            onRefresh={() => {
+              orderQuery.refetch();
+              trackingQuery.refetch();
+            }}
+          />
+        }
+      >
         {/* Order Info Card */}
         <View style={styles.orderInfoCard}>
           <View style={styles.orderHeader}>
             <View style={styles.orderInfo}>
-              <ThemedText style={styles.orderNumber}>{orderInfo.orderNumber}</ThemedText>
-              <ThemedText style={styles.orderTotal}>{orderInfo.total}</ThemedText>
+              <ThemedText style={styles.orderNumber}>{order.orderNumber}</ThemedText>
+              <ThemedText style={styles.orderTotal}>{formatZAR(order.total)}</ThemedText>
             </View>
-            <TouchableOpacity onPress={handleViewOrderDetails} style={styles.detailsButton}>
-              <ThemedText style={styles.detailsButtonText}>Details</ThemedText>
-              <IconSymbol name="chevron.right" size={16} color="#007AFF" />
-            </TouchableOpacity>
           </View>
 
-          <ThemedText style={styles.itemsHeader}>Items ({orderInfo.itemCount})</ThemedText>
+          <ThemedText style={styles.itemsHeader}>
+            Items ({order.items.reduce((sum, item) => sum + item.quantity, 0)})
+          </ThemedText>
 
-          {items.map((item) => {
-            const imageAsset = getLocalAsset(item.image);
+          {order.items.map((item) => {
+            const imageAsset = imageSource(item.image);
             return (
               <View key={item.id} style={styles.productInfo}>
                 {imageAsset ? (
@@ -188,13 +270,15 @@ export default function TrackOrderScreen() {
                   <ThemedText style={styles.artistName}>
                     By {item.merchant.displayName}
                   </ThemedText>
-                  {item.selectedSize && (
-                    <ThemedText style={styles.productSize}>Size: {item.selectedSize}</ThemedText>
+                  {item.size && (
+                    <ThemedText style={styles.productSize}>Size: {item.size}</ThemedText>
                   )}
                   <View style={styles.productPriceRow}>
-                    <ThemedText style={styles.productQuantity}>Qty: {item.quantity}</ThemedText>
+                    <ThemedText style={styles.productQuantity}>
+                      Qty: {item.quantity}
+                    </ThemedText>
                     <ThemedText style={styles.productPrice}>
-                      {item.currency}{(item.price * item.quantity).toFixed(2)}
+                      {formatZAR(item.lineTotal)}
                     </ThemedText>
                   </View>
                 </View>
@@ -206,47 +290,127 @@ export default function TrackOrderScreen() {
             <View style={styles.deliveryRow}>
               <IconSymbol name="calendar" size={16} color="#666" />
               <ThemedText style={styles.deliveryText}>
-                Estimated delivery: {orderInfo.estimatedDelivery}
+                Estimated delivery:{' '}
+                {estimatedDelivery
+                  ? new Date(estimatedDelivery).toLocaleDateString('en-ZA', {
+                      day: 'numeric',
+                      month: 'long',
+                    })
+                  : 'To be confirmed'}
               </ThemedText>
             </View>
             <View style={styles.deliveryRow}>
               <IconSymbol name="location" size={16} color="#666" />
               <ThemedText style={styles.deliveryText}>
-                {orderInfo.shippingAddress}
+                {address.line1}, {address.city}, {address.postalCode}
               </ThemedText>
             </View>
           </View>
         </View>
 
-        {/* Order Status Timeline */}
-        <View style={styles.timelineCard}>
-          <ThemedText style={styles.timelineTitle}>Order Status</ThemedText>
-          <View style={styles.timeline}>
-            {orderStatuses.map((status, index) => renderStatusStep(status, index))}
+        {/* Cancelled banner OR Status Timeline */}
+        {order.status === 'CANCELLED' ? (
+          <View style={styles.timelineCard}>
+            <View style={styles.cancelledRow}>
+              <IconSymbol name="slash.circle" size={24} color="#b3261e" />
+              <View style={styles.cancelledContent}>
+                <ThemedText style={styles.cancelledTitle}>Order cancelled</ThemedText>
+                <ThemedText style={styles.statusDescription}>
+                  This order has been cancelled and won&apos;t be delivered.
+                </ThemedText>
+              </View>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.timelineCard}>
+            <ThemedText style={styles.timelineTitle}>Order Status</ThemedText>
+            <View style={styles.timeline}>
+              {timeline.map((step, index) => renderStatusStep(step, index))}
+            </View>
+          </View>
+        )}
+
+        {/* Courier Tracking */}
+        {order.status !== 'CANCELLED' && (
+          <View style={styles.timelineCard}>
+            <ThemedText style={styles.timelineTitle}>Courier Tracking</ThemedText>
+            {trackingQuery.isPending ? (
+              <ActivityIndicator size="small" color="#333" />
+            ) : tracking ? (
+              <>
+                <View style={styles.trackingHeaderRow}>
+                  <ThemedText style={styles.trackingWaybill}>
+                    {tracking.courier} · {tracking.trackingNumber}
+                  </ThemedText>
+                </View>
+                {tracking.events.length === 0 ? (
+                  <ThemedText style={styles.statusDescription}>
+                    No scans yet — updates appear here as the parcel moves.
+                  </ThemedText>
+                ) : (
+                  tracking.events.map((event, index) => (
+                    <View key={index} style={styles.trackingEvent}>
+                      <ThemedText style={styles.trackingEventDescription}>
+                        {event.description ?? 'Update'}
+                      </ThemedText>
+                      <ThemedText style={styles.trackingEventMeta}>
+                        {[formatDateTime(event.at), event.location]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </ThemedText>
+                    </View>
+                  ))
+                )}
+              </>
+            ) : trackingPending ? (
+              <ThemedText style={styles.statusDescription}>
+                The courier hasn&apos;t collected your order yet. Tracking will
+                appear here once it&apos;s on the move.
+              </ThemedText>
+            ) : (
+              <ThemedText style={styles.statusDescription}>
+                Couldn&apos;t load tracking right now. Pull to refresh.
+              </ThemedText>
+            )}
+          </View>
+        )}
 
         {/* Actions */}
         <View style={styles.actionsCard}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleContactArtist}>
+          <TouchableOpacity style={styles.actionButton} onPress={handleContactBrand}>
             <IconSymbol name="message" size={20} color="#007AFF" />
             <View style={styles.actionButtonContent}>
-              <ThemedText style={styles.actionButtonTitle}>Contact Artist</ThemedText>
-              <ThemedText style={styles.actionButtonSubtitle}>Ask questions about your order</ThemedText>
+              <ThemedText style={styles.actionButtonTitle}>
+                Contact {order.items[0]?.merchant.displayName ?? 'the brand'}
+              </ThemedText>
+              <ThemedText style={styles.actionButtonSubtitle}>
+                Ask questions about your order
+              </ThemedText>
             </View>
             <IconSymbol name="chevron.right" size={16} color="#666" />
           </TouchableOpacity>
 
-          <View style={styles.actionDivider} />
-
-          <TouchableOpacity style={styles.actionButton} onPress={handleUpdateNotifications}>
-            <IconSymbol name="bell" size={20} color="#007AFF" />
-            <View style={styles.actionButtonContent}>
-              <ThemedText style={styles.actionButtonTitle}>Update Notifications</ThemedText>
-              <ThemedText style={styles.actionButtonSubtitle}>Change how you receive updates</ThemedText>
-            </View>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
-          </TouchableOpacity>
+          {canCancel && (
+            <>
+              <View style={styles.actionDivider} />
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleCancelOrder}
+                disabled={cancelMutation.isPending}
+              >
+                <IconSymbol name="xmark.circle" size={20} color="#b3261e" />
+                <View style={styles.actionButtonContent}>
+                  <ThemedText style={[styles.actionButtonTitle, styles.cancelActionTitle]}>
+                    {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
+                  </ThemedText>
+                  <ThemedText style={styles.actionButtonSubtitle}>
+                    Free cancellation before dispatch
+                  </ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={16} color="#666" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* Help Section */}
@@ -255,7 +419,8 @@ export default function TrackOrderScreen() {
           <View style={styles.helpContent}>
             <ThemedText style={styles.helpTitle}>Need Help?</ThemedText>
             <ThemedText style={styles.helpText}>
-              If you have any questions about your order, feel free to contact us or the artist directly.
+              If you have any questions about your order, feel free to contact
+              the brand directly.
             </ThemedText>
           </View>
         </View>
@@ -271,6 +436,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    gap: 16,
+    backgroundColor: '#fff',
+  },
+  stateTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+  },
+  primaryButton: {
+    backgroundColor: '#000',
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -331,16 +522,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#007AFF',
     fontFamily: 'Didot',
-  },
-  detailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  detailsButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
   },
   itemsHeader: {
     fontSize: 14,
@@ -443,6 +624,43 @@ const styles = StyleSheet.create({
   timeline: {
     gap: 0,
   },
+  cancelledRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  cancelledContent: {
+    flex: 1,
+  },
+  cancelledTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#b3261e',
+    marginBottom: 4,
+  },
+  trackingHeaderRow: {
+    marginBottom: 12,
+  },
+  trackingWaybill: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+  },
+  trackingEvent: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  trackingEventDescription: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000',
+    marginBottom: 2,
+  },
+  trackingEventMeta: {
+    fontSize: 12,
+    color: '#999',
+  },
   statusStep: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -540,6 +758,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
     marginBottom: 2,
+  },
+  cancelActionTitle: {
+    color: '#b3261e',
   },
   actionButtonSubtitle: {
     fontSize: 14,

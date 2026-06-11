@@ -4,8 +4,11 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { SideMenu } from '@/components/SideMenu';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -13,57 +16,116 @@ import {
   View,
   StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useFilter } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
-import { getLocalAsset } from '@/lib/local-assets';
-import { searchDummyProducts } from '@/lib/dummy-data';
+import { resolveBookmarked, useServerSocial } from '@/lib/server-social';
+import { useRequireAuth, useToggleBookmark } from '@/hooks/useSocialMutations';
+import { imageSource } from '@/lib/image-source';
+import { formatZAR } from '@/lib/format';
+import type { GenderType, Product } from '@/lib/api-client';
+import {
+  useDebouncedValue,
+  useSearchResults,
+  useSearchSuggestions,
+  useTrackSearch,
+} from '@/hooks/useSearchQueries';
+
+const RECENT_SEARCHES_KEY = 'recent_searches';
+const MAX_RECENT = 5;
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const { activePrimaryFilter } = useFilter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState<string[]>([
-    'Abstract Art',
-    'Handmade Rugs',
-    'Urban Style',
-    'Local Artists',
-  ]);
+  // Set on submit / recent / trending tap to bypass the 250ms debounce.
+  const [instantQuery, setInstantQuery] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [hasBeenInteracted, setHasBeenInteracted] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [, setActiveCategory] = useState<string>('All');
 
-  const { toggleLike, toggleBookmark, isLiked, isBookmarked } = useSocialStore();
+  // Likes stay local-only in v1; bookmarks are server-backed.
+  const { toggleLike, isLiked } = useSocialStore();
+  const { bookmarked } = useServerSocial();
+  const toggleBookmark = useToggleBookmark();
+  const requireAuth = useRequireAuth();
 
+  // Search respects the global gender tab; home-lifestyle has no backend
+  // taxonomy yet so those searches go unscoped (open-questions §P-4).
+  const gender: GenderType | undefined =
+    activePrimaryFilter === 'home-lifestyle' ? undefined : activePrimaryFilter;
+
+  const debouncedQuery = useDebouncedValue(searchQuery, 250);
+  const effectiveQuery = (instantQuery ?? debouncedQuery).trim();
+
+  const resultsQuery = useSearchResults(effectiveQuery, gender);
+  const suggestionsQuery = useSearchSuggestions();
+
+  const searchResults: Product[] =
+    resultsQuery.data?.pages.flatMap((page) => page.products) ?? [];
+  const firstPageCount = resultsQuery.data?.pages[0]?.products.length;
+  useTrackSearch(
+    effectiveQuery,
+    gender,
+    resultsQuery.isSuccess && !resultsQuery.isPlaceholderData ? firstPageCount : undefined
+  );
+
+  const trendingTags = suggestionsQuery.data?.trending ?? [];
   const isSearching = searchQuery.trim().length > 0;
 
-  const searchResults = isSearching ? searchDummyProducts(searchQuery) : [];
-  const totalResults = searchResults.length;
+  // Recent searches persist on-device (contract: hydrate from AsyncStorage).
+  useEffect(() => {
+    AsyncStorage.getItem(RECENT_SEARCHES_KEY)
+      .then((raw) => raw && setRecentSearches(JSON.parse(raw)))
+      .catch(() => {});
+  }, []);
 
-  const handleSearch = (query: string) => {
+  const saveRecent = useCallback((term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => {
+      const next = [trimmed, ...prev.filter((t) => t !== trimmed)].slice(0, MAX_RECENT);
+      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const handleTextChange = (query: string) => {
     setSearchQuery(query);
-    if (query.trim().length > 0 && !recentSearches.includes(query.trim())) {
-      setRecentSearches([query.trim(), ...recentSearches.slice(0, 4)]);
-    }
+    setInstantQuery(null);
   };
 
-  const handleRecentSearchPress = (searchTerm: string) => {
-    setSearchQuery(searchTerm);
-    setHasBeenInteracted(true);
+  const handleSubmit = (term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    setSearchQuery(trimmed);
+    setInstantQuery(trimmed);
+    saveRecent(trimmed);
   };
 
   const clearRecentSearch = (index: number) => {
-    const updated = recentSearches.filter((_, i) => i !== index);
-    setRecentSearches(updated);
+    setRecentSearches((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
   };
 
-  const handleCategoryChange = (category: string) => {
-    setActiveCategory(category);
-  };
+  const handleCategoryChange = useCallback(
+    (category: string) => setActiveCategory(category),
+    []
+  );
 
-  const handleBookmark = (productId: string) => toggleBookmark(productId);
+  const handleBookmark = (product: Product) => {
+    if (!requireAuth()) return;
+    toggleBookmark(
+      product.id,
+      resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)
+    );
+  };
   const handleLike = (productId: string) => toggleLike(productId);
 
   const handleSearchFocus = () => setIsSearchFocused(true);
@@ -77,19 +139,55 @@ export default function SearchScreen() {
   const handleBackToGrid = () => {
     setIsSearchFocused(false);
     setSearchQuery('');
-    setHasBeenInteracted(true);
+    setInstantQuery(null);
+  };
+
+  const handleResultsScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const nearBottom =
+      contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
+    if (nearBottom && resultsQuery.hasNextPage && !resultsQuery.isFetchingNextPage) {
+      resultsQuery.fetchNextPage();
+    }
   };
 
   useFocusEffect(
     React.useCallback(() => {
       setIsSearchFocused(false);
       setSearchQuery('');
-
-      return () => {
-        setHasBeenInteracted(false);
-      };
+      setInstantQuery(null);
     }, [])
   );
+
+  const renderResultsGrid = () => {
+    const rows: Product[][] = [];
+    for (let i = 0; i < searchResults.length; i += 2) {
+      rows.push(searchResults.slice(i, i + 2));
+    }
+
+    return rows.map((rowProducts, rowIndex) => (
+      <View key={`row-${rowIndex}`} style={styles.gridRow}>
+        {rowProducts.map((product) => (
+          <View key={product.id} style={styles.gridItem}>
+            <ProductCard
+              productImage={imageSource(product.primaryImage)}
+              profileImage={imageSource(product.merchant.logo)}
+              artistName={product.merchant.displayName}
+              productTitle={product.name}
+              price={formatZAR(product.price)}
+              location={product.merchant.username}
+              productId={product.id}
+              artistId={product.merchant.username}
+              onBookmark={() => handleBookmark(product)}
+              onLike={() => handleLike(product.id)}
+              isLiked={isLiked(product.id)}
+              isBookmarked={resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)}
+            />
+          </View>
+        ))}
+      </View>
+    ));
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -116,7 +214,8 @@ export default function SearchScreen() {
             placeholder="Search artists, products, locations..."
             placeholderTextColor="#999"
             value={searchQuery}
-            onChangeText={handleSearch}
+            onChangeText={handleTextChange}
+            onSubmitEditing={() => handleSubmit(searchQuery)}
             onFocus={handleSearchFocus}
             onBlur={handleSearchBlur}
             autoCapitalize="none"
@@ -125,7 +224,7 @@ export default function SearchScreen() {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => handleSearch('')} style={styles.clearButton}>
+            <TouchableOpacity onPress={() => handleTextChange('')} style={styles.clearButton}>
               <IconSymbol name="xmark.circle.fill" size={20} color="#999" />
             </TouchableOpacity>
           )}
@@ -138,7 +237,11 @@ export default function SearchScreen() {
       )}
 
       {isSearchFocused && !isSearching && (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.content}>
             {recentSearches.length > 0 && (
               <View style={styles.section}>
@@ -147,7 +250,7 @@ export default function SearchScreen() {
                   <TouchableOpacity
                     key={index}
                     style={styles.recentSearchItem}
-                    onPress={() => handleRecentSearchPress(search)}
+                    onPress={() => handleSubmit(search)}
                   >
                     <IconSymbol name="clock" size={16} color="#666" />
                     <ThemedText style={styles.recentSearchText}>{search}</ThemedText>
@@ -162,26 +265,22 @@ export default function SearchScreen() {
               </View>
             )}
 
-            <View style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Trending</ThemedText>
-              <View style={styles.trendingTags}>
-                {[
-                  '#HandmadeArt',
-                  '#LocalArtists',
-                  '#VintageRugs',
-                  '#ModernDesign',
-                  '#SouthAfricanArt',
-                ].map((tag) => (
-                  <TouchableOpacity
-                    key={tag}
-                    style={styles.trendingTag}
-                    onPress={() => handleSearch(tag.substring(1))}
-                  >
-                    <ThemedText style={styles.trendingTagText}>{tag}</ThemedText>
-                  </TouchableOpacity>
-                ))}
+            {trendingTags.length > 0 && (
+              <View style={styles.section}>
+                <ThemedText style={styles.sectionTitle}>Trending</ThemedText>
+                <View style={styles.trendingTags}>
+                  {trendingTags.map((tag) => (
+                    <TouchableOpacity
+                      key={tag}
+                      style={styles.trendingTag}
+                      onPress={() => handleSubmit(tag.replace(/^#/, ''))}
+                    >
+                      <ThemedText style={styles.trendingTagText}>{tag}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </View>
+            )}
           </View>
 
           <TouchableOpacity
@@ -193,79 +292,49 @@ export default function SearchScreen() {
       )}
 
       {isSearching && (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleResultsScroll}
+          scrollEventThrottle={16}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.resultsContainer}>
-            <ThemedText style={styles.resultsHeader}>
-              {totalResults} result{totalResults !== 1 ? 's' : ''} for "{searchQuery}"
-            </ThemedText>
-
-            {searchResults.length > 0 && (
-              <View style={styles.results}>
-                {(() => {
-                  const content = [];
-                  for (let i = 0; i < searchResults.length; i += 2) {
-                    const rowProducts = [];
-
-                    const product1 = searchResults[i];
-                    const productImage1 = getLocalAsset(product1.primaryImage);
-                    const merchantLogo1 = product1.merchant.logo ? getLocalAsset(product1.merchant.logo) : undefined;
-
-                    rowProducts.push(
-                      <View key={product1.id} style={styles.gridItem}>
-                        <ProductCard
-                          productImage={productImage1 || { uri: product1.primaryImage }}
-                          profileImage={merchantLogo1}
-                          artistName={product1.merchant.displayName}
-                          productTitle={product1.name}
-                          price={`R${product1.price.toFixed(2)}`}
-                          location={product1.merchant.username}
-                          productId={product1.id}
-                          artistId={product1.merchant.username}
-                          onBookmark={() => handleBookmark(product1.id)}
-                          onLike={() => handleLike(product1.id)}
-                          isLiked={isLiked(product1.id)}
-                          isBookmarked={isBookmarked(product1.id)}
-                        />
-                      </View>
-                    );
-
-                    if (i + 1 < searchResults.length) {
-                      const product2 = searchResults[i + 1];
-                      const productImage2 = getLocalAsset(product2.primaryImage);
-                      const merchantLogo2 = product2.merchant.logo ? getLocalAsset(product2.merchant.logo) : undefined;
-
-                      rowProducts.push(
-                        <View key={product2.id} style={styles.gridItem}>
-                          <ProductCard
-                            productImage={productImage2 || { uri: product2.primaryImage }}
-                            profileImage={merchantLogo2}
-                            artistName={product2.merchant.displayName}
-                            productTitle={product2.name}
-                            price={`R${product2.price.toFixed(2)}`}
-                            location={product2.merchant.username}
-                            productId={product2.id}
-                            artistId={product2.merchant.username}
-                            onBookmark={() => handleBookmark(product2.id)}
-                            onLike={() => handleLike(product2.id)}
-                            isLiked={isLiked(product2.id)}
-                            isBookmarked={isBookmarked(product2.id)}
-                          />
-                        </View>
-                      );
-                    }
-
-                    content.push(
-                      <View key={`row-${i}`} style={styles.gridRow}>
-                        {rowProducts}
-                      </View>
-                    );
-                  }
-                  return content;
-                })()}
+            {resultsQuery.isPending ? (
+              <View style={styles.noResults}>
+                <ActivityIndicator size="large" color="#333" />
               </View>
-            )}
-
-            {searchResults.length === 0 && (
+            ) : resultsQuery.isError ? (
+              <View style={styles.noResults}>
+                <ThemedText style={styles.noResultsTitle}>Search failed</ThemedText>
+                <ThemedText style={styles.noResultsText}>
+                  Couldn&apos;t reach YIIVA. Check your connection and try again.
+                </ThemedText>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => resultsQuery.refetch()}
+                >
+                  <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+                </TouchableOpacity>
+              </View>
+            ) : searchResults.length > 0 ? (
+              <>
+                <ThemedText style={styles.resultsHeader}>
+                  {searchResults.length}
+                  {resultsQuery.hasNextPage ? '+' : ''} result
+                  {searchResults.length !== 1 || resultsQuery.hasNextPage ? 's' : ''} for &quot;
+                  {effectiveQuery}&quot;
+                </ThemedText>
+                <View
+                  style={[styles.results, resultsQuery.isPlaceholderData && styles.resultsStale]}
+                >
+                  {renderResultsGrid()}
+                  {resultsQuery.isFetchingNextPage && (
+                    <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+                  )}
+                </View>
+              </>
+            ) : (
               <View style={styles.noResults}>
                 <IconSymbol name="magnifyingglass" size={48} color="#ccc" />
                 <ThemedText style={styles.noResultsTitle}>No results found</ThemedText>
@@ -401,6 +470,12 @@ const styles = StyleSheet.create({
   results: {
     paddingBottom: 100,
   },
+  resultsStale: {
+    opacity: 0.5,
+  },
+  pagingSpinner: {
+    marginVertical: 16,
+  },
   gridRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -427,6 +502,18 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
   backToGridArea: {
     flex: 1,

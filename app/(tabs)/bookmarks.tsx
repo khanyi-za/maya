@@ -3,143 +3,216 @@ import { ProductCard } from '@/components/ProductCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useBookmarks } from '@/hooks/useBookmarkQueries';
+import { useToggleBookmark } from '@/hooks/useSocialMutations';
+import { useAuthStore } from '@/lib/auth-store';
+import { useSocialStore } from '@/lib/social-store';
+import { formatZAR } from '@/lib/format';
+import { imageSource } from '@/lib/image-source';
+import type { Bookmark } from '@/lib/api-client';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View, StatusBar } from 'react-native';
+import {
+  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  StatusBar,
+} from 'react-native';
 
-interface BookmarkedItem {
-  id: string;
-  productImage: any;
-  artistName: string;
-  productTitle: string;
-  price: string;
-  bookmarkedAt: string;
+function savedAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return minutes <= 1 ? 'just now' : `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
 }
 
-// Sample bookmarked items - in a real app this would come from user's saved items
-const bookmarkedItems: BookmarkedItem[] = [
-  {
-    id: '1',
-    productImage: require('@/assets/mock-data/tol-thema/Plain Lindy -round neck.png'),
-    artistName: 'Tol-thema',
-    productTitle: 'Plain Lindy - Round Neck',
-    price: 'R1,150',
-    bookmarkedAt: '2 days ago'
-  },
-  {
-    id: '2',
-    productImage: require('@/assets/images/masonwabe_jersey.png'),
-    artistName: 'Masonwabe Ntloko',
-    productTitle: 'Sisipho rectangular Rug',
-    price: 'R3,600',
-    bookmarkedAt: '5 days ago'
-  },
-  {
-    id: '3',
-    productImage: require('@/assets/mock-data/tol-thema/Snatched kimono barbie.png'),
-    artistName: 'Tol-thema',
-    productTitle: 'Snatched Waist Kimono',
-    price: 'R1,250',
-    bookmarkedAt: '1 week ago'
-  },
-];
-
 export default function BookmarksScreen() {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const authStatus = useAuthStore((s) => s.state.status);
+  const { toggleLike, isLiked } = useSocialStore();
 
-  const handleBookmarkRemove = (itemId: string) => {
-    // Handle removing bookmark
-    console.log('Remove bookmark:', itemId);
+  const bookmarksQuery = useBookmarks();
+  // Shared toggle keeps the server-social overlay in sync so Home/Search
+  // cards un-bookmark instantly too.
+  const toggleBookmark = useToggleBookmark();
+
+  const bookmarks: Bookmark[] =
+    bookmarksQuery.data?.pages.flatMap((page) => page.bookmarks) ?? [];
+
+  const handleBookmarkRemove = (productId: string) => {
+    toggleBookmark(productId, true);
   };
-
-  const handleLike = () => {
-    // Handle like action
-    console.log('Liked');
-  };
-
 
   const toggleViewMode = () => {
     setViewMode(viewMode === 'list' ? 'grid' : 'list');
   };
 
-  const renderEmptyState = () => (
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const nearBottom =
+      contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
+    if (nearBottom && bookmarksQuery.hasNextPage && !bookmarksQuery.isFetchingNextPage) {
+      bookmarksQuery.fetchNextPage();
+    }
+  };
+
+  const renderCenteredState = (
+    icon: string,
+    title: string,
+    text: string,
+    action?: { label: string; onPress: () => void }
+  ) => (
     <View style={styles.emptyState}>
-      <IconSymbol name="bookmark" size={64} color="#ccc" />
-      <ThemedText style={styles.emptyTitle}>No bookmarks yet</ThemedText>
-      <ThemedText style={styles.emptyText}>
-        Save products you love by tapping the bookmark icon
-      </ThemedText>
+      <IconSymbol name={icon as any} size={64} color="#ccc" />
+      <ThemedText style={styles.emptyTitle}>{title}</ThemedText>
+      <ThemedText style={styles.emptyText}>{text}</ThemedText>
+      {action && (
+        <TouchableOpacity style={styles.emptyButton} onPress={action.onPress}>
+          <ThemedText style={styles.emptyButtonText}>{action.label}</ThemedText>
+        </TouchableOpacity>
+      )}
     </View>
   );
+
+  const renderBody = () => {
+    if (authStatus === 'guest') {
+      return renderCenteredState(
+        'bookmark',
+        'Sign in to see your wishlist',
+        'Your saved products live in your YIIVA account',
+        { label: 'Sign In', onPress: () => router.push('/auth/login') }
+      );
+    }
+
+    if (bookmarksQuery.isPending || authStatus === 'loading') {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#333" />
+        </View>
+      );
+    }
+
+    if (bookmarksQuery.isError) {
+      return renderCenteredState(
+        'bookmark',
+        "Couldn't load your wishlist",
+        'Check your connection and try again.',
+        { label: 'Retry', onPress: () => bookmarksQuery.refetch() }
+      );
+    }
+
+    if (bookmarks.length === 0) {
+      return renderCenteredState(
+        'bookmark',
+        'No bookmarks yet',
+        'Save products you love by tapping the bookmark icon'
+      );
+    }
+
+    return (
+      <View style={styles.content}>
+        {viewMode === 'list' ? (
+          // List view with ProductCards
+          <View style={styles.listView}>
+            {bookmarks.map((bookmark) => {
+              const { product } = bookmark;
+              return (
+                <View key={product.id} style={styles.bookmarkItem}>
+                  <ProductCard
+                    productImage={imageSource(product.primaryImage)}
+                    profileImage={imageSource(product.merchant.logo)}
+                    artistName={product.merchant.displayName}
+                    productTitle={product.name}
+                    price={formatZAR(product.price)}
+                    productId={product.id}
+                    artistId={product.merchant.username}
+                    onBookmark={() => handleBookmarkRemove(product.id)}
+                    onLike={() => toggleLike(product.id)}
+                    isLiked={isLiked(product.id)}
+                    isBookmarked={true}
+                  />
+                  <View style={styles.bookmarkMeta}>
+                    <ThemedText style={styles.bookmarkTime}>
+                      Saved {savedAgo(bookmark.bookmarkedAt)}
+                    </ThemedText>
+                    {!product.available && (
+                      <ThemedText style={styles.unavailableText}>
+                        No longer available
+                      </ThemedText>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          // Grid view with MasonryGrid
+          <View style={styles.gridView}>
+            <MasonryGrid
+              data={bookmarks.map((bookmark) => ({
+                id: bookmark.product.id,
+                image: imageSource(bookmark.product.primaryImage),
+                brand: bookmark.product.merchant.displayName,
+                title: bookmark.product.name,
+                price: formatZAR(bookmark.product.price),
+                height: Math.floor(Math.random() * 100) + 200,
+              }))}
+              onItemPress={(item) => router.push(`/product/${item.id}`)}
+              spacing={12}
+              columns={2}
+            />
+          </View>
+        )}
+        {bookmarksQuery.isFetchingNextPage && (
+          <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+        )}
+      </View>
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <ThemedText style={styles.headerTitle}>Wishlist</ThemedText>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={toggleViewMode} style={styles.viewToggle}>
-            <IconSymbol 
-              name={viewMode === 'list' ? 'square.grid.2x2' : 'list.bullet'} 
-              size={20} 
-              color="#666" 
+            <IconSymbol
+              name={viewMode === 'list' ? 'square.grid.2x2' : 'list.bullet'}
+              size={20}
+              color="#666"
             />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={bookmarksQuery.isRefetching}
+            onRefresh={() => bookmarksQuery.refetch()}
+          />
+        }
       >
-        {bookmarkedItems.length === 0 ? (
-          renderEmptyState()
-        ) : (
-          <View style={styles.content}>
-            {viewMode === 'list' ? (
-              // List view with ProductCards
-              <View style={styles.listView}>
-                {bookmarkedItems.map((item) => (
-                  <View key={item.id} style={styles.bookmarkItem}>
-                    <ProductCard
-                      productImage={item.productImage}
-                      artistName={item.artistName}
-                      productTitle={item.productTitle}
-                      price={item.price}
-                      productId={item.id}
-                      onBookmark={() => handleBookmarkRemove(item.id)}
-                      onLike={handleLike}
-                    />
-                    <View style={styles.bookmarkMeta}>
-                      <ThemedText style={styles.bookmarkTime}>
-                        Saved {item.bookmarkedAt}
-                      </ThemedText>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              // Grid view with MasonryGrid
-              <View style={styles.gridView}>
-                <MasonryGrid
-                  data={bookmarkedItems.map(item => ({
-                    id: item.id,
-                    image: item.productImage,
-                    brand: item.artistName,
-                    title: item.productTitle,
-                    price: item.price,
-                    height: Math.floor(Math.random() * 100) + 200,
-                  }))}
-                  onItemPress={(item) => console.log('Grid item pressed:', item.title)}
-                  spacing={12}
-                  columns={2}
-                />
-              </View>
-            )}
-          </View>
-        )}
+        {renderBody()}
       </ScrollView>
     </ThemedView>
   );
@@ -193,12 +266,23 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   bookmarkMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     paddingLeft: 4,
     marginTop: 8,
   },
   bookmarkTime: {
     fontSize: 12,
     color: '#999',
+  },
+  unavailableText: {
+    fontSize: 12,
+    color: '#b3261e',
+    fontWeight: '600',
+  },
+  pagingSpinner: {
+    marginVertical: 16,
   },
   emptyState: {
     flex: 1,
@@ -219,5 +303,17 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  emptyButton: {
+    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

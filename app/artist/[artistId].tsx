@@ -1,15 +1,18 @@
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   TouchableOpacity,
   View,
-  Animated,
   Modal,
   Pressable,
   Linking,
@@ -18,11 +21,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { EvenGrid } from '@/components/EvenGrid';
-import { useSocialStore } from '@/lib/social-store';
-import { getLocalAsset } from '@/lib/local-assets';
-import { getDummyMerchant, getDummyMerchantProducts } from '@/lib/dummy-data';
+import { resolveFollowed, useServerSocial } from '@/lib/server-social';
+import { useRequireAuth, useToggleFollow } from '@/hooks/useSocialMutations';
+import { imageSource } from '@/lib/image-source';
+import { formatZAR } from '@/lib/format';
+import { APIError } from '@/lib/api-client';
+import {
+  useMerchantProfile,
+  useMerchantProducts,
+  useTrackMerchantView,
+} from '@/hooks/useMerchantQueries';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+// Cloudinary video URLs live under /video/upload/; .mp4 covers legacy fixtures.
+function isVideoUrl(url: string): boolean {
+  return url.includes('/video/') || url.endsWith('.mp4');
+}
 
 function HeroMediaItem({
   media,
@@ -30,29 +45,29 @@ function HeroMediaItem({
   currentMediaIndex,
   isVideoMuted,
 }: {
-  media: { url: string; type: string; localAsset: any };
+  media: { url: string; type: 'image' | 'video'; source: any };
   index: number;
   currentMediaIndex: number;
   isVideoMuted: boolean;
 }) {
-  const videoPlayer =
-    media.type === 'video'
-      ? useVideoPlayer(media.localAsset, (player) => {
-          player.loop = true;
-          player.muted = isVideoMuted;
-          if (index === currentMediaIndex) {
-            player.play();
-          }
-        })
-      : null;
+  const videoPlayer = useVideoPlayer(
+    media.type === 'video' ? media.source : null,
+    (player) => {
+      player.loop = true;
+      player.muted = isVideoMuted;
+      if (index === currentMediaIndex) {
+        player.play();
+      }
+    }
+  );
 
   return (
     <View style={styles.heroMediaContainer}>
       {media.type === 'image' ? (
-        <Image source={media.localAsset} style={styles.heroMedia} contentFit="cover" />
+        <Image source={media.source} style={styles.heroMedia} contentFit="cover" />
       ) : (
         <VideoView
-          player={videoPlayer!}
+          player={videoPlayer}
           style={styles.heroMedia}
           contentFit="cover"
           nativeControls={false}
@@ -70,57 +85,68 @@ export default function ArtistProfileScreen() {
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [showContactModal, setShowContactModal] = useState(false);
   const insets = useSafeAreaInsets();
-  const scrollX = useRef(new Animated.Value(0)).current;
 
-  const artistId = params.artistId as string;
+  // Route param is named artistId for historical reasons; the value is the
+  // merchant username (see CLAUDE.md footguns).
+  const username = params.artistId as string;
 
-  const { toggleFollow, isFollowing: isFollowingStore } = useSocialStore();
+  const { followed } = useServerSocial();
+  const toggleFollow = useToggleFollow();
+  const requireAuth = useRequireAuth();
 
-  const merchant = getDummyMerchant(artistId);
-  const { products, categories } = React.useMemo(
-    () => getDummyMerchantProducts(artistId, selectedCategory !== 'All' ? selectedCategory : undefined),
-    [artistId, selectedCategory]
+  const profileQuery = useMerchantProfile(username);
+  const productsQuery = useMerchantProducts(
+    username,
+    selectedCategory !== 'All' ? selectedCategory : undefined
   );
-  const isFollowing = isFollowingStore(merchant.id);
+  const merchant = profileQuery.data?.merchant;
+  useTrackMerchantView(merchant?.id);
+
+  const products = React.useMemo(
+    () => productsQuery.data?.pages.flatMap((p) => p.products) ?? [],
+    [productsQuery.data]
+  );
+  const categories = productsQuery.data?.pages[0]?.categories ?? [];
 
   const gridData = React.useMemo(
     () =>
-      products.map(product => ({
+      products.map((product) => ({
         id: product.id,
-        image: getLocalAsset(product.primaryImage),
+        image: imageSource(product.primaryImage),
         title: product.name,
-        price: `${product.currency} ${product.price.toFixed(2)}`,
+        price: formatZAR(product.price),
       })),
     [products]
   );
 
   const heroMediaItems = React.useMemo(
     () =>
-      merchant.heroMedia.map((url: string) => ({
-        url: url,
-        type: url.endsWith('.mp4') ? 'video' : 'image',
-        localAsset: getLocalAsset(url),
+      (merchant?.heroMedia ?? []).map((url: string) => ({
+        url,
+        type: (isVideoUrl(url) ? 'video' : 'image') as 'image' | 'video',
+        source: imageSource(url),
       })),
     [merchant]
   );
+  const hasVideo = heroMediaItems.some((m) => m.type === 'video');
 
-  const logoAsset = React.useMemo(
-    () => getLocalAsset(`/demo-assets/${merchant.username}/${merchant.logo}`),
-    [merchant]
-  );
-
-  const handleFollow = () => toggleFollow(merchant.id);
-
+  const handleFollow = () => {
+    if (!merchant || !requireAuth()) return;
+    toggleFollow(
+      merchant.id,
+      resolveFollowed(followed, merchant.id, merchant.isFollowedByMe)
+    );
+  };
   const handleContact = () => setShowContactModal(true);
 
   const handleSendMessage = () => {
     setShowContactModal(false);
-    router.push(`/chat/${merchant.username}`);
+    router.push(`/chat/${username}`);
   };
 
   const handleSendEmail = () => {
-    const email = merchant.email || `info@${merchant.username}.com`;
-    Linking.openURL(`mailto:${email}`);
+    if (!merchant?.contact.email) return;
+    Linking.openURL(`mailto:${merchant.contact.email}`);
     setShowContactModal(false);
   };
 
@@ -132,7 +158,74 @@ export default function ArtistProfileScreen() {
     setCurrentMediaIndex(index);
   };
 
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const nearBottom =
+      contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
+    if (nearBottom && productsQuery.hasNextPage && !productsQuery.isFetchingNextPage) {
+      productsQuery.fetchNextPage();
+    }
+  };
+
   const toggleVideoMute = () => setIsVideoMuted(!isVideoMuted);
+
+  // ── Loading / error / suspended states ──
+
+  if (profileQuery.isPending) {
+    return (
+      <View style={[styles.container, styles.stateContainer]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color="#333" />
+      </View>
+    );
+  }
+
+  if (profileQuery.isError || !merchant) {
+    const notFound =
+      profileQuery.error instanceof APIError && profileQuery.error.status === 404;
+    return (
+      <View style={[styles.container, styles.stateContainer]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ThemedText style={styles.stateTitle}>
+          {notFound ? 'Brand not found' : "Couldn't load this brand"}
+        </ThemedText>
+        <TouchableOpacity
+          style={styles.stateButton}
+          onPress={() =>
+            notFound ? router.dismissTo('/(tabs)') : profileQuery.refetch()
+          }
+        >
+          <ThemedText style={styles.stateButtonText}>
+            {notFound ? 'Browse YIIVA' : 'Retry'}
+          </ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}>
+          <ThemedText style={styles.stateBackLink}>Go back</ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (merchant.status !== 'ACTIVE') {
+    return (
+      <View style={[styles.container, styles.stateContainer]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ThemedText style={styles.stateTitle}>{merchant.displayName}</ThemedText>
+        <ThemedText style={styles.stateText}>
+          This brand is currently unavailable on YIIVA.
+        </ThemedText>
+        <TouchableOpacity
+          style={styles.stateButton}
+          onPress={() => router.dismissTo('/(tabs)')}
+        >
+          <ThemedText style={styles.stateButtonText}>Browse YIIVA</ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const isFollowing = resolveFollowed(followed, merchant.id, merchant.isFollowedByMe);
+  const contactEmail = merchant.contact.email;
 
   return (
     <View style={styles.container}>
@@ -180,46 +273,74 @@ export default function ArtistProfileScreen() {
                 <IconSymbol name="chevron.right" size={20} color="#ccc" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.contactOption} onPress={handleSendEmail}>
-                <View style={styles.contactOptionIcon}>
-                  <IconSymbol name="envelope" size={24} color="#007AFF" />
-                </View>
-                <View style={styles.contactOptionContent}>
-                  <ThemedText style={styles.contactOptionTitle}>Email</ThemedText>
-                  <ThemedText style={styles.contactOptionSubtitle}>
-                    {merchant.email || `info@${merchant.username}.com`}
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color="#ccc" />
-              </TouchableOpacity>
+              {contactEmail && (
+                <TouchableOpacity style={styles.contactOption} onPress={handleSendEmail}>
+                  <View style={styles.contactOptionIcon}>
+                    <IconSymbol name="envelope" size={24} color="#007AFF" />
+                  </View>
+                  <View style={styles.contactOptionContent}>
+                    <ThemedText style={styles.contactOptionTitle}>Email</ThemedText>
+                    <ThemedText style={styles.contactOptionSubtitle}>
+                      {contactEmail}
+                    </ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={20} color="#ccc" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
       </Modal>
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={profileQuery.isRefetching}
+            onRefresh={() => {
+              profileQuery.refetch();
+              productsQuery.refetch();
+            }}
+          />
+        }
+      >
         {/* Hero Section */}
         <View style={[styles.heroSection, { height: screenWidth * 1.2 }]}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleMediaScroll}
-            scrollEventThrottle={16}
-            style={styles.heroCarousel}
-          >
-            {heroMediaItems.map((media, index) => (
-              <HeroMediaItem
-                key={index}
-                media={media}
-                index={index}
-                currentMediaIndex={currentMediaIndex}
-                isVideoMuted={isVideoMuted}
-              />
-            ))}
-          </ScrollView>
+          {heroMediaItems.length > 0 ? (
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleMediaScroll}
+              scrollEventThrottle={16}
+              style={styles.heroCarousel}
+            >
+              {heroMediaItems.map((media, index) => (
+                <HeroMediaItem
+                  key={index}
+                  media={media}
+                  index={index}
+                  currentMediaIndex={currentMediaIndex}
+                  isVideoMuted={isVideoMuted}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={[styles.heroCarousel, styles.heroPlaceholder]}>
+              {merchant.logo && (
+                <Image
+                  source={imageSource(merchant.logo)}
+                  style={styles.heroPlaceholderLogo}
+                  contentFit="cover"
+                />
+              )}
+            </View>
+          )}
 
-          <View style={styles.heroOverlay} />
+          <View style={styles.heroOverlay} pointerEvents="none" />
 
           <TouchableOpacity
             style={[styles.closeButton, { top: insets.top + 10 }]}
@@ -228,33 +349,37 @@ export default function ArtistProfileScreen() {
             <IconSymbol name="chevron.left" size={24} color="#fff" />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.muteButton, { top: insets.top + 10 }]}
-            onPress={toggleVideoMute}
-          >
-            <IconSymbol
-              name={isVideoMuted ? 'speaker.slash' : 'speaker.wave.2'}
-              size={20}
-              color="#fff"
-            />
-          </TouchableOpacity>
+          {hasVideo && (
+            <TouchableOpacity
+              style={[styles.muteButton, { top: insets.top + 10 }]}
+              onPress={toggleVideoMute}
+            >
+              <IconSymbol
+                name={isVideoMuted ? 'speaker.slash' : 'speaker.wave.2'}
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
 
           <View style={styles.profilePictureContainer}>
             <Image
-              source={logoAsset}
+              source={imageSource(merchant.logo)}
               style={[styles.profilePicture, styles.profilePlaceholder]}
               contentFit="cover"
             />
           </View>
 
-          <View style={styles.dotContainer}>
-            {heroMediaItems.map((_, index) => (
-              <View
-                key={index}
-                style={[styles.dot, index === currentMediaIndex && styles.activeDot]}
-              />
-            ))}
-          </View>
+          {heroMediaItems.length > 1 && (
+            <View style={styles.dotContainer}>
+              {heroMediaItems.map((_, index) => (
+                <View
+                  key={index}
+                  style={[styles.dot, index === currentMediaIndex && styles.activeDot]}
+                />
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Merchant Name */}
@@ -284,44 +409,75 @@ export default function ArtistProfileScreen() {
 
         {/* Bio Section */}
         <View style={styles.bioSection}>
-          <ThemedText style={styles.bioText}>{merchant.bio}</ThemedText>
-          <View style={styles.locationContainer}>
-            <IconSymbol name="location.fill" size={14} color="#666" />
-            <ThemedText style={styles.locationText}>{merchant.location}</ThemedText>
-          </View>
+          {merchant.bio ? (
+            <ThemedText style={styles.bioText}>{merchant.bio}</ThemedText>
+          ) : null}
+          {merchant.location ? (
+            <View style={styles.locationContainer}>
+              <IconSymbol name="location.fill" size={14} color="#666" />
+              <ThemedText style={styles.locationText}>{merchant.location}</ThemedText>
+            </View>
+          ) : null}
         </View>
 
         {/* Category Tabs */}
-        <View style={styles.categorySection}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScrollContainer}
-          >
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={[
-                  styles.categoryTab,
-                  selectedCategory === category && styles.selectedCategoryTab,
-                ]}
-                onPress={() => setSelectedCategory(category)}
-              >
-                <ThemedText
+        {categories.length > 0 && (
+          <View style={styles.categorySection}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScrollContainer}
+            >
+              {['All', ...categories].map((category) => (
+                <TouchableOpacity
+                  key={category}
                   style={[
-                    styles.categoryTabText,
-                    selectedCategory === category && styles.selectedCategoryTabText,
+                    styles.categoryTab,
+                    selectedCategory === category && styles.selectedCategoryTab,
                   ]}
+                  onPress={() => setSelectedCategory(category)}
                 >
-                  {category}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+                  <ThemedText
+                    style={[
+                      styles.categoryTabText,
+                      selectedCategory === category && styles.selectedCategoryTabText,
+                    ]}
+                  >
+                    {category === 'All'
+                      ? 'All'
+                      : category.charAt(0).toUpperCase() + category.slice(1)}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Product Grid */}
-        <EvenGrid data={gridData} onItemPress={handleGridItemPress} />
+        {productsQuery.isPending ? (
+          <View style={styles.gridStateContainer}>
+            <ActivityIndicator size="small" color="#333" />
+          </View>
+        ) : productsQuery.isError ? (
+          <View style={styles.gridStateContainer}>
+            <ThemedText style={styles.stateText}>
+              Couldn&apos;t load this brand&apos;s products.
+            </ThemedText>
+            <TouchableOpacity
+              style={styles.stateButton}
+              onPress={() => productsQuery.refetch()}
+            >
+              <ThemedText style={styles.stateButtonText}>Retry</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <EvenGrid data={gridData} onItemPress={handleGridItemPress} />
+            {productsQuery.isFetchingNextPage && (
+              <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+            )}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -332,12 +488,64 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  stateContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 16,
+  },
+  stateTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  stateText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  stateButton: {
+    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  stateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  stateBackLink: {
+    fontSize: 14,
+    color: '#666',
+    textDecorationLine: 'underline',
+  },
+  gridStateContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  pagingSpinner: {
+    marginVertical: 16,
+  },
   heroSection: {
     position: 'relative',
   },
   heroCarousel: {
     width: '100%',
     height: '100%',
+  },
+  heroPlaceholder: {
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroPlaceholderLogo: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.4,
   },
   heroMediaContainer: {
     width: screenWidth,

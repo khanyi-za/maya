@@ -10,18 +10,24 @@
 
 | § | Endpoint | Method | Auth | Status | Used by |
 |---|---|---|---|---|---|
-| 1 | `/products/feed` | GET | optional | 🟡 | Home |
-| 2 | `/products/new-arrivals` | GET | optional | 🟡 | Home |
+| 1 | `/products/feed` | GET | optional | ✅ | Home |
+| 2 | `/products/new-arrivals` | GET | optional | ✅ | Home |
 | 3 | `/products/featured` | GET | optional | 🟡 | TBD (Explore) |
-| 4 | `/products/{id}` | GET | optional | 🟡 | Product Detail, Cart |
-| 5 | `/products/{id}/similar` | GET | optional | 🟡 | Product Detail |
-| 6 | `/products/{id}/view` | POST | optional | 🔴 | Product Detail (analytics) |
+| 4 | `/products/{id}` | GET | optional | ✅ | Product Detail, Cart |
+| 5 | `/products/{id}/similar` | GET | optional | ✅ | Product Detail |
+| 6 | `/products/{id}/view` | POST | optional | ✅ | Product Detail (analytics) |
 
 Status: ✅ implemented · 🟡 proposed (already in `lib/api-client.ts`) · 🔴 proposed (new)
 
 ---
 
-## 1. Get product feed 🟡
+## 1. Get product feed ✅
+
+> Implemented in nuwa: `GET /api/products/feed`. Cursor pagination, gender filter
+> (`women`/`men` include UNISEX), personalised `isBookmarkedByMe` +
+> `merchant.isFollowedByMe` when authed; `isLikedByMe` always false (likes are
+> local-only in v1). `category`/`clothingType` are derived from the product's
+> first linked category for now.
 
 The gender-filtered, paginated main grid. Infinite scroll-friendly.
 
@@ -88,7 +94,11 @@ Global default.
 
 ---
 
-## 2. Get new arrivals 🟡
+## 2. Get new arrivals ✅
+
+> Implemented in nuwa: `GET /api/products/new-arrivals`. v1 heuristic = most
+> recent ACTIVE products in the gender (the future Phalo engine replaces the
+> ranking). Sold-out exclusion (P-6) deferred.
 
 ```
 GET /products/new-arrivals
@@ -135,7 +145,11 @@ Global default.
 
 ---
 
-## 3. Get featured products 🟡
+## 3. Get featured products ⏸️ (deferred — Explore scrapped 2026-06-10)
+
+> Not implemented. Its only consumer was the Explore screen, which has been
+> shelved (see `screens/10-explore/screen.md`). Revisit if Explore is re-scoped
+> with a distinct purpose (EX-1).
 
 ```
 GET /products/featured
@@ -147,7 +161,15 @@ Full spec drafted when the Explore screen doc lands. Shape mirrors `/products/ne
 
 ---
 
-## 4. Get product detail 🟡
+## 4. Get product detail ✅
+
+> Implemented in nuwa: `GET /api/products/{id}`. `variants[]` from nuwa
+> `ProductVariant` (`size` = variant size or name; `available`/`stockCount` from
+> stock−reserved). **`inventoryType` + `leadTime` are omitted** — made-to-order
+> is a deprecated prototype feature, not in v1. `likeCount` is 0 + `isLikedByMe`
+> false (likes local-only). `smartCategories` ← product tags; `merchant.bio` ←
+> store description; `merchant.location` is null in v1. Video `media` items have
+> no `thumbnail` yet. 404 `PRODUCT_NOT_FOUND` when product/store not ACTIVE.
 
 ```
 GET /products/{productId}
@@ -235,7 +257,11 @@ Global default.
 
 ---
 
-## 5. Get similar products 🟡
+## 5. Get similar products ✅
+
+> Implemented in nuwa: `GET /api/products/{id}/similar`. v1 heuristic = recent
+> ACTIVE products in the same gender, excluding the source (Phalo replaces the
+> ranking later).
 
 ```
 GET /products/{productId}/similar
@@ -289,7 +315,11 @@ Global default.
 
 ---
 
-## 6. Record product view 🔴
+## 6. Record product view ✅
+
+> Implemented in nuwa: `POST /api/products/{id}/view`. Thin writer — inserts an
+> `AnalyticsEvent` (`eventType: 'product_view'`) for the future Phalo engine.
+> Returns `{ recorded: true }` (200). Fire-and-forget; maya ignores the response.
 
 Analytics signal — records that the current user (or anonymous session) viewed a product. Feeds recommendation engines and merchant analytics.
 

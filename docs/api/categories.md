@@ -10,14 +10,18 @@
 
 | § | Endpoint | Method | Auth | Status | Used by |
 |---|---|---|---|---|---|
-| 1 | `/categories` | GET | none | 🔴 | Home (chip rail), Shop tab (categories grid) |
+| 1 | `/categories` | GET | none | ✅ | Home (chip rail), Shop tab (categories grid) |
 | 2 | `/smart-categories` | GET | none | 🔴 | TBD (Explore, Search) |
 
 Status: 🔴 proposed (new — currently hard-coded in mobile)
 
 ---
 
-## 1. List categories 🔴
+## 1. List categories ✅
+
+> Implemented in nuwa: `GET /api/categories`. Returns top-level admin-created
+> categories ordered by `sortOrder`. `genderType` is accepted but does not
+> filter yet — nuwa categories are a single ungendered admin tree in v1.
 
 ```
 GET /categories

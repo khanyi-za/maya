@@ -60,7 +60,10 @@ Global default. Burst-friendly.
 
 ---
 
-## 2. Bookmark / unbookmark a product 🔴
+## 2. Bookmark / unbookmark a product ✅
+
+> Implemented in nuwa: `PUT/DELETE /api/products/{productId}/bookmark`
+> (= WishlistItem). Idempotent.
 
 ```
 PUT    /products/{productId}/bookmark    → bookmark
@@ -83,7 +86,12 @@ Same as Like.
 
 ---
 
-## 3. Follow / unfollow a merchant 🔴
+## 3. Follow / unfollow a merchant ✅
+
+> Implemented in nuwa: `PUT/DELETE /api/merchants/{merchantId}/follow`
+> (= StoreFollower; `merchantId` is the Store id). Idempotent; returns updated
+> `followerCount`. `CANNOT_FOLLOW_SELF` (409) when the user owns the store.
+> Note: §1 Like is NOT implemented — likes stay local-only on maya for v1.
 
 ```
 PUT    /merchants/{merchantId}/follow    → follow
@@ -112,7 +120,15 @@ Global default.
 
 ---
 
-## 4. List my bookmarks 🔴
+## 4. List my bookmarks ✅
+
+> **Implemented in nuwa: `GET /api/me/bookmarks`** (auth-required). Lists
+> `WishlistItem`s as the bookmark wrapper; `product` is the standard feed card +
+> an `available` flag (computed from stock; inactive/sold-out kept with
+> `available: false` per WL-11). **`priceChanged` is always `false` + `priceAtBookmark`
+> = the current price** — `WishlistItem` has no add-time price yet (same v1
+> limitation as the cart). Cursor-paginated. **Sort: `newest`/`oldest` only in
+> v1** (`price_asc`/`price_desc`/`merchant` accepted but deferred to v2).
 
 ```
 GET /me/bookmarks

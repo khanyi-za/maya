@@ -4,11 +4,24 @@ import { Image } from 'expo-image';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { getLocalAsset } from '@/lib/local-assets';
+import { imageSource } from '@/lib/image-source';
+import type { Category } from '@/lib/api-client';
 
 interface CategoryFilterProps {
+  /**
+   * Selected value passed to the callback: a category slug from the API list,
+   * or 'All'. (Legacy hardcoded mode passes the display name instead.)
+   */
   onCategoryChange: (category: string) => void;
   primaryFilter?: 'men' | 'women' | 'home-lifestyle';
   searchMode?: boolean;
+  /**
+   * API-driven categories (GET /api/categories). When provided, the rail
+   * renders 'All' + these and ignores the legacy hardcoded sets. When
+   * provided but empty, the rail hides entirely (categories degrade
+   * gracefully — docs/screens/01-home/api-contract.md failure modes).
+   */
+  categories?: Category[];
 }
 
 // TODO: Replace with actual category-specific images
@@ -76,24 +89,48 @@ const categoryMap = {
   ]
 };
 
-export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false }: CategoryFilterProps) {
-  const [selectedCategory, setSelectedCategory] = useState(searchMode ? 'All' : 'All');
+interface Chip {
+  value: string; // passed to onCategoryChange
+  label: string;
+  image: any; // expo-image source or undefined -> text-only chip
+}
 
-  const handleCategoryPress = (category: string) => {
-    setSelectedCategory(category);
-    onCategoryChange(category);
+export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false, categories }: CategoryFilterProps) {
+  const [selectedValue, setSelectedValue] = useState('All');
+  const apiDriven = categories !== undefined;
+
+  const handleCategoryPress = (value: string) => {
+    setSelectedValue(value);
+    onCategoryChange(value);
   };
 
-  // Get categories based on search mode or primary filter
-  const categories = searchMode 
-    ? ['All', 'Men', 'Women', 'Home & Lifestyle']
-    : categoryMap[primaryFilter] || categoryMap.men;
-
-  // Reset selected category when primary filter changes
+  // Reset selection when the primary filter (and so the chip set) changes
   React.useEffect(() => {
-    setSelectedCategory('All');
+    setSelectedValue('All');
     onCategoryChange('All');
   }, [primaryFilter, onCategoryChange, searchMode]);
+
+  let chips: Chip[];
+  if (apiDriven) {
+    if (categories.length === 0) return null;
+    chips = [
+      { value: 'All', label: 'All', image: getLocalAsset(getCategoryImage('All', primaryFilter)) },
+      ...categories.map((c) => ({
+        value: c.slug,
+        label: c.displayName,
+        image: imageSource(c.image),
+      })),
+    ];
+  } else {
+    const names = searchMode
+      ? ['All', 'Men', 'Women', 'Home & Lifestyle']
+      : categoryMap[primaryFilter] || categoryMap.men;
+    chips = names.map((name) => ({
+      value: name,
+      label: name,
+      image: getLocalAsset(getCategoryImage(name, primaryFilter)),
+    }));
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -109,42 +146,41 @@ export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', search
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
       >
-        {categories.map((category) => {
-          const imageUrl = getCategoryImage(category, primaryFilter);
-          const imageAsset = getLocalAsset(imageUrl);
-
-          return (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryCard,
-                selectedCategory === category && styles.selectedCategoryCard
-              ]}
-              onPress={() => handleCategoryPress(category)}
-              activeOpacity={0.9}
-            >
+        {chips.map((chip) => (
+          <TouchableOpacity
+            key={chip.value}
+            style={[
+              styles.categoryCard,
+              selectedValue === chip.value && styles.selectedCategoryCard
+            ]}
+            onPress={() => handleCategoryPress(chip.value)}
+            activeOpacity={0.9}
+          >
+            {chip.image ? (
               <Image
-                source={imageAsset}
+                source={chip.image}
                 style={styles.categoryImage}
                 contentFit="cover"
               />
-              <View style={styles.categoryOverlay}>
-                <ThemedText
-                  style={[
-                    styles.categoryText,
-                    selectedCategory === category && styles.selectedCategoryText
-                  ]}
-                  numberOfLines={1}
-                >
-                  {category}
-                </ThemedText>
-              </View>
-              {selectedCategory === category && (
-                <View style={styles.selectedBorder} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
+            ) : (
+              <View style={[styles.categoryImage, styles.textOnlyChip]} />
+            )}
+            <View style={styles.categoryOverlay}>
+              <ThemedText
+                style={[
+                  styles.categoryText,
+                  selectedValue === chip.value && styles.selectedCategoryText
+                ]}
+                numberOfLines={1}
+              >
+                {chip.label}
+              </ThemedText>
+            </View>
+            {selectedValue === chip.value && (
+              <View style={styles.selectedBorder} />
+            )}
+          </TouchableOpacity>
+        ))}
       </ScrollView>
     </ThemedView>
   );
@@ -189,6 +225,9 @@ const styles = StyleSheet.create({
   categoryImage: {
     width: '100%',
     height: '100%',
+  },
+  textOnlyChip: {
+    backgroundColor: '#1a1a1a',
   },
   categoryOverlay: {
     position: 'absolute',

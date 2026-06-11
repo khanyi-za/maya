@@ -35,7 +35,12 @@ When `Authorization: Bearer <token>` is present, the backend uses the user's car
 
 ---
 
-## 1. Get cart summary 🔴
+## 1. Get cart summary ✅
+
+> Implemented in nuwa: `GET /api/cart/summary`. v1 supports the authenticated
+> buyer's server cart only; guests (no `X-Cart-Session` server cart yet) get
+> `{ itemCount: 0 }`. `itemCount` = total units. Guest server carts land with
+> the Cart screen work.
 
 Lightweight endpoint for the cart-icon badge on every screen with `YiivaHeader`.
 
@@ -70,7 +75,13 @@ Global default. Called frequently — recommend ETag support so 304 responses ar
 
 ---
 
-## 2. Get full cart 🔴
+## 2. Get full cart ✅
+
+> Implemented in nuwa: `GET /api/cart`. Auth optional — guests get the empty
+> cart shape (`items: []`), no 404. `available` + `stockCount` computed from
+> stock; **`priceChanged` is always `false` in v1** (CartItem doesn't store the
+> add-time price yet — revisit with a `priceAtAddInCents` field). Video
+> `image` thumbnails not yet available.
 
 ```
 GET /cart
@@ -138,7 +149,13 @@ Global default. Cart screen calls this on mount, on pull-to-refresh, and on `App
 
 ---
 
-## 3. Add item to cart 🔴
+## 3. Add item to cart ✅
+
+> Implemented in nuwa: `POST /api/cart/items`. **v1 is auth-required** (not yet
+> guest via `X-Cart-Session`) — guests get 401, and maya's §4c fallback opens
+> the login modal. Reuses the shared `reserveStock` primitive. `variantId`
+> required when the product has variants (400 `VALIDATION_ERROR`). Stock race →
+> 409 `OUT_OF_STOCK`. Returns the full cart shape (§2).
 
 ```
 POST /cart/items
@@ -223,7 +240,11 @@ Global default. Burst-friendly.
 
 ---
 
-## 4. Update cart item 🔴
+## 4. Update cart item ✅
+
+> Implemented in nuwa: `PATCH /api/cart/items/{itemId}`. Auth-required (v1).
+> Reserves/releases the stock delta; 409 `OUT_OF_STOCK` on insufficient stock;
+> 404 `CART_ITEM_NOT_FOUND` (also on cross-user access). Returns the full cart.
 
 ```
 PATCH /cart/items/{itemId}
@@ -259,7 +280,10 @@ Global default.
 
 ---
 
-## 5. Remove cart item 🔴
+## 5. Remove cart item ✅
+
+> Implemented in nuwa: `DELETE /api/cart/items/{itemId}`. Auth-required (v1).
+> Releases the line's reserved stock. Returns the full cart.
 
 ```
 DELETE /cart/items/{itemId}
@@ -292,7 +316,10 @@ Global default.
 
 ---
 
-## 6. Clear cart 🔴
+## 6. Clear cart ✅
+
+> Implemented in nuwa: `DELETE /api/cart`. Auth-required (v1). Releases all
+> reserved stock and returns the empty cart.
 
 ```
 DELETE /cart
