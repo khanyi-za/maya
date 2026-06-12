@@ -32,6 +32,7 @@ import {
   useSearchSuggestions,
   useTrackSearch,
 } from '@/hooks/useSearchQueries';
+import { trackSearch } from '@/lib/api-client';
 
 const RECENT_SEARCHES_KEY = 'recent_searches';
 const MAX_RECENT = 5;
@@ -167,7 +168,7 @@ export default function SearchScreen() {
 
     return rows.map((rowProducts, rowIndex) => (
       <View key={`row-${rowIndex}`} style={styles.gridRow}>
-        {rowProducts.map((product) => (
+        {rowProducts.map((product, colIndex) => (
           <View key={product.id} style={styles.gridItem}>
             <ProductCard
               productImage={imageSource(product.primaryImage)}
@@ -180,6 +181,15 @@ export default function SearchScreen() {
               artistId={product.merchant.username}
               onBookmark={() => handleBookmark(product)}
               onLike={() => handleLike(product.id)}
+              onPress={() =>
+                // Ranking feedback signal (phalo-search.md S2). Best-effort.
+                trackSearch({
+                  q: effectiveQuery,
+                  genderType: gender,
+                  clickedProductId: product.id,
+                  position: rowIndex * 2 + colIndex,
+                }).catch(() => {})
+              }
               isLiked={isLiked(product.id)}
               isBookmarked={resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)}
             />

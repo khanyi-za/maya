@@ -1270,13 +1270,18 @@ export async function getSearchSuggestions(): Promise<{
 }
 
 /**
- * Fire-and-forget search analytics (docs/api/search.md §6).
+ * Fire-and-forget search analytics (docs/api/search.md §6). Two variants:
+ * settled query ({q, resultCount}) and result-card click
+ * ({q, clickedProductId, position}) — the ranking feedback signal
+ * (nuwa docs/phalo-engine/phalo-search.md S2).
  * Backend endpoint: POST /api/search/track
  */
 export async function trackSearch(params: {
   q: string;
   genderType?: GenderType;
   resultCount?: number;
+  clickedProductId?: string;
+  position?: number;
 }): Promise<void> {
   await fetchAPI<{ recorded: boolean }>('/search/track', {
     method: 'POST',

@@ -18,6 +18,8 @@ interface ProductCardProps {
   artistId?: string;
   onBookmark?: () => void;
   onLike?: () => void;
+  /** Observe product taps (e.g. search-click analytics); navigation still happens. */
+  onPress?: () => void;
   isLiked?: boolean;
   isBookmarked?: boolean;
 }
@@ -34,6 +36,7 @@ export function ProductCard({
   artistId,
   onBookmark,
   onLike,
+  onPress,
   isLiked = false,
   isBookmarked = false,
 }: ProductCardProps) {
@@ -46,6 +49,7 @@ export function ProductCard({
   };
 
   const handleProductPress = () => {
+    onPress?.();
     if (productId) {
       router.push(`/product/${productId}`);
     }
