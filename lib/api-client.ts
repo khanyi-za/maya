@@ -359,13 +359,21 @@ export interface Bookmark {
  * Chat shapes (docs/api/chat.md). REST owns writes; the socket.io /chat
  * namespace fans out message:new / read events (CH-1).
  */
+export interface ChatImageAttachment {
+  type: 'image';
+  url: string;
+  thumbnailUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
   sender: 'user' | 'merchant';
   senderId: string;
   text: string | null;
-  attachments: unknown[];
+  attachments: ChatImageAttachment[];
   orderRef: string | null;
   status: 'sent' | 'delivered' | 'read';
   createdAt: string;
@@ -998,7 +1006,7 @@ export async function getChatMessages(
  */
 export async function sendChatMessage(
   conversationId: string,
-  body: { text?: string; attachments?: unknown[]; orderRef?: string },
+  body: { text?: string; attachments?: ChatImageAttachment[]; orderRef?: string },
   idempotencyKey: string
 ): Promise<{ message: ChatMessage }> {
   return fetchAPI<{ message: ChatMessage }>(

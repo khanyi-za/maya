@@ -25,9 +25,11 @@ import {
   getChatMessages,
   markConversationRead,
   sendChatMessage,
+  type ChatImageAttachment,
   type ChatMessage,
 } from '@/lib/api-client';
 import { openChatSocket } from '@/lib/chat-socket';
+import { pickChatImage, uploadChatImage } from '@/lib/chat-upload';
 
 function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -53,6 +55,11 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [pendingAttachment, setPendingAttachment] = useState<
+    | { localUri: string; status: 'uploading'; attachment: null }
+    | { localUri: string; status: 'ready'; attachment: ChatImageAttachment }
+    | null
+  >(null);
 
   const conversationQuery = useQuery({
     queryKey: ['chat', 'conversation', username],
@@ -122,9 +129,16 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
+  const canSend =
+    (inputText.trim().length > 0 || pendingAttachment?.status === 'ready') &&
+    pendingAttachment?.status !== 'uploading';
+
   const handleSend = async () => {
     const text = inputText.trim();
-    if (text.length === 0 || !conversationId) return;
+    const attachment =
+      pendingAttachment?.status === 'ready' ? pendingAttachment.attachment : null;
+    if ((text.length === 0 && !attachment) || !conversationId) return;
+    if (pendingAttachment?.status === 'uploading') return;
 
     const idempotencyKey = uuid();
     const tempId = `local-${idempotencyKey}`;
@@ -133,19 +147,24 @@ export default function ChatScreen() {
       conversationId,
       sender: 'user',
       senderId: 'me',
-      text,
-      attachments: [],
+      text: text || null,
+      attachments: attachment ? [attachment] : [],
       orderRef: orderId ?? null,
       status: 'sent',
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
     setInputText('');
+    setPendingAttachment(null);
 
     try {
       const { message } = await sendChatMessage(
         conversationId,
-        { text, ...(orderId ? { orderRef: orderId } : {}) },
+        {
+          ...(text ? { text } : {}),
+          ...(attachment ? { attachments: [attachment] } : {}),
+          ...(orderId ? { orderRef: orderId } : {}),
+        },
         idempotencyKey
       );
       // Swap the optimistic bubble for the server message; if the socket echo
@@ -167,9 +186,19 @@ export default function ChatScreen() {
     }
   };
 
-  const handleAttach = () => {
-    // Image attachments need the chat_attachment Cloudinary preset (ops item).
-    Alert.alert('Coming soon', 'Photo attachments are on their way.');
+  const handleAttach = async () => {
+    if (pendingAttachment) return;
+    const picked = await pickChatImage();
+    if (!picked) return;
+
+    setPendingAttachment({ localUri: picked.uri, status: 'uploading', attachment: null });
+    try {
+      const attachment = await uploadChatImage(picked);
+      setPendingAttachment({ localUri: picked.uri, status: 'ready', attachment });
+    } catch {
+      setPendingAttachment(null);
+      Alert.alert("Couldn't upload the photo", 'Check your connection and try again.');
+    }
   };
 
   const formatTime = (iso: string) => {
@@ -198,11 +227,27 @@ export default function ChatScreen() {
           <Image source={logoSource} style={styles.messageAvatar} contentFit="cover" />
         )}
         <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.artistBubble]}>
-          <Text
-            style={[styles.messageText, isUser ? styles.userMessageText : styles.artistMessageText]}
-          >
-            {item.text}
-          </Text>
+          {item.attachments.map((attachment, index) => {
+            const aspect =
+              attachment.width && attachment.height
+                ? attachment.width / attachment.height
+                : 1;
+            return (
+              <Image
+                key={`${item.id}-att-${index}`}
+                source={{ uri: attachment.thumbnailUrl ?? attachment.url }}
+                style={[styles.messageImage, { aspectRatio: Math.min(Math.max(aspect, 0.5), 2) }]}
+                contentFit="cover"
+              />
+            );
+          })}
+          {!!item.text && (
+            <Text
+              style={[styles.messageText, isUser ? styles.userMessageText : styles.artistMessageText]}
+            >
+              {item.text}
+            </Text>
+          )}
           <Text style={[styles.messageTime, isUser ? styles.userMessageTime : styles.artistMessageTime]}>
             {formatTime(item.createdAt)}
           </Text>
@@ -346,9 +391,37 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
+          {pendingAttachment && (
+            <View style={styles.pendingAttachment}>
+              <Image
+                source={{ uri: pendingAttachment.localUri }}
+                style={styles.pendingAttachmentImage}
+                contentFit="cover"
+              />
+              {pendingAttachment.status === 'uploading' && (
+                <View style={styles.pendingAttachmentOverlay}>
+                  <ActivityIndicator size="small" color="#fff" />
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.pendingAttachmentRemove}
+                onPress={() => setPendingAttachment(null)}
+              >
+                <IconSymbol name="xmark.circle.fill" size={22} color="#333" />
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={styles.inputWrapper}>
-            <TouchableOpacity style={styles.attachButton} onPress={handleAttach}>
-              <IconSymbol name="plus.circle.fill" size={28} color="#007AFF" />
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={handleAttach}
+              disabled={!!pendingAttachment}
+            >
+              <IconSymbol
+                name="plus.circle.fill"
+                size={28}
+                color={pendingAttachment ? '#ccc' : '#007AFF'}
+              />
             </TouchableOpacity>
 
             <TextInput
@@ -367,14 +440,14 @@ export default function ChatScreen() {
             />
 
             <TouchableOpacity
-              style={[styles.sendButton, inputText.trim().length === 0 && styles.sendButtonDisabled]}
+              style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
               onPress={handleSend}
-              disabled={inputText.trim().length === 0}
+              disabled={!canSend}
             >
               <IconSymbol
                 name="arrow.up.circle.fill"
                 size={32}
-                color={inputText.trim().length > 0 ? '#007AFF' : '#ccc'}
+                color={canSend ? '#007AFF' : '#ccc'}
               />
             </TouchableOpacity>
           </View>
@@ -506,6 +579,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
+  },
+  messageImage: {
+    width: 200,
+    borderRadius: 12,
+    marginTop: 2,
+    marginBottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  pendingAttachment: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    marginLeft: 40,
+  },
+  pendingAttachmentImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: '#f0f0f0',
+  },
+  pendingAttachmentOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingAttachmentRemove: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#fff',
+    borderRadius: 11,
   },
   userBubble: {
     backgroundColor: '#007AFF',

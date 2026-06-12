@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import React from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, View, Dimensions } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, Dimensions } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { IconSymbol } from './ui/IconSymbol';
 
@@ -21,10 +21,15 @@ interface EvenGridProps {
 const screenWidth = Dimensions.get('window').width;
 const itemWidth = (screenWidth - 48) / 2; // Account for padding and gap
 
+// Plain mapped grid (not a FlatList): this component renders inside the
+// merchant profile's vertical ScrollView, where a nested VirtualizedList
+// can't window anyway and RN warns. The outer ScrollView owns scrolling +
+// infinite-scroll pagination.
 export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridProps) {
-  const renderItem = ({ item }: { item: GridItem }) => (
-    <TouchableOpacity 
-      style={styles.gridItem} 
+  const renderItem = (item: GridItem) => (
+    <TouchableOpacity
+      key={item.id}
+      style={styles.gridItem}
       onPress={() => onItemPress(item)}
       activeOpacity={0.8}
     >
@@ -46,18 +51,21 @@ export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridPro
     </TouchableOpacity>
   );
 
+  const rows: GridItem[][] = [];
+  for (let i = 0; i < data.length; i += 2) {
+    rows.push(data.slice(i, i + 2));
+  }
+
   return (
     <View style={styles.container}>
-      <FlatList
-        data={data}
-        renderItem={renderItem}
-        numColumns={2}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        columnWrapperStyle={styles.row}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={ListHeaderComponent}
-      />
+      {ListHeaderComponent && <ListHeaderComponent />}
+      <View style={styles.listContainer}>
+        {rows.map((rowItems, rowIndex) => (
+          <View key={rowItems[0]?.id ?? rowIndex} style={styles.row}>
+            {rowItems.map(renderItem)}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -73,6 +81,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   row: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 20,
   },
