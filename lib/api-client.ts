@@ -17,16 +17,20 @@ import { getOptionalAuthHeader } from './api';
 export const USE_FIXTURES = false;
 
 /**
- * Platform-specific API base URLs
- * - iOS Simulator: Can access localhost directly
- * - Android Emulator: Must use 10.0.2.2 to reach host machine
- * - Physical Device: Use your computer's local IP address
+ * Backend origin.
+ * - EXPO_PUBLIC_API_URL (see .env) overrides everything — set it to the demo
+ *   backend (e.g. http://localhost:3005) or a LAN IP for a physical device.
+ * - Otherwise falls back to the platform default:
+ *   iOS Simulator reaches localhost directly; Android Emulator needs 10.0.2.2.
  */
-const API_BASE_URL = Platform.select({
-  ios: 'http://localhost:3000/api',
-  android: 'http://10.0.2.2:3000/api',
-  default: 'http://localhost:3000/api',
-});
+const API_ORIGIN =
+  process.env.EXPO_PUBLIC_API_URL ??
+  Platform.select({
+    ios: 'http://localhost:3000',
+    android: 'http://10.0.2.2:3000',
+    default: 'http://localhost:3000',
+  });
+const API_BASE_URL = `${API_ORIGIN}/api`;
 
 // =============================================================================
 // TYPE DEFINITIONS

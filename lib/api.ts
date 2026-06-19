@@ -13,12 +13,18 @@ import {
   clearRefreshToken,
 } from './secure-storage';
 
-/** Auth endpoints live at the server root (no /api prefix). */
-export const AUTH_BASE = Platform.select({
-  ios: 'http://localhost:3000',
-  android: 'http://10.0.2.2:3000',
-  default: 'http://localhost:3000',
-});
+/**
+ * Auth endpoints live at the server root (no /api prefix).
+ * EXPO_PUBLIC_API_URL (see .env) overrides for the demo backend; otherwise the
+ * platform default (iOS localhost / Android 10.0.2.2).
+ */
+export const AUTH_BASE =
+  process.env.EXPO_PUBLIC_API_URL ??
+  Platform.select({
+    ios: 'http://localhost:3000',
+    android: 'http://10.0.2.2:3000',
+    default: 'http://localhost:3000',
+  });
 
 export class ApiError extends Error {
   constructor(
