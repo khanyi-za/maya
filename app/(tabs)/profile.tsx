@@ -22,6 +22,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { useUnreadNotificationCount } from '@/hooks/useNotificationQueries';
 
 const VIEW_MODE_KEY = 'yiiva.shopViewMode';
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -60,7 +61,8 @@ export default function ProfileScreen() {
 
   const handleMenuPress = () => setIsMenuVisible(true);
   const handleCartPress = () => router.push('/cart');
-  const handleNotificationsPress = () => console.log('Notifications pressed');
+  const handleNotificationsPress = () => router.push('/notifications');
+  const unreadNotifications = useUnreadNotificationCount();
 
   const handleShopFilterChange = (mode: 'brands' | 'categories') => {
     setShopFilterMode(mode);
@@ -272,6 +274,7 @@ export default function ProfileScreen() {
         onMenuPress={handleMenuPress}
         onCartPress={handleCartPress}
         onNotificationsPress={handleNotificationsPress}
+        unreadCount={unreadNotifications.data?.unreadCount ?? 0}
       />
 
       <FeedTabs />

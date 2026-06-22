@@ -42,8 +42,12 @@ const SA_PROVINCES = [
   'Western Cape',
 ];
 
-const RETURN_URL = 'yiivaapp://payment-return?status=success';
-const CANCEL_URL = 'yiivaapp://payment-return?status=cancelled';
+// PayFast validates return_url/cancel_url as http(s) and rejects custom schemes
+// (a yiivaapp:// deep link → "url format is invalid", 400). We use an https
+// sentinel on a real domain; the WebView intercepts navigation to it
+// (onShouldStartLoadWithRequest) before it ever loads — see app/payfast.tsx.
+const RETURN_URL = 'https://yiiva.co.za/payment-return?status=success';
+const CANCEL_URL = 'https://yiiva.co.za/payment-return?status=cancelled';
 
 const EMPTY_ADDRESS_FORM = {
   recipientName: '',

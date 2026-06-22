@@ -3,11 +3,38 @@
 // minutes (the PayFast ITN can take a moment to land server-side).
 
 import { useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { APIError, cancelOrder, getOrder, getOrderTracking } from '@/lib/api-client';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
+  APIError,
+  cancelOrder,
+  getOrder,
+  getOrders,
+  getOrderTracking,
+} from '@/lib/api-client';
+import { useAuthStore } from '@/lib/auth-store';
 
 const POLL_INTERVAL_MS = 5_000;
 const POLL_WINDOW_MS = 2 * 60 * 1000;
+
+/**
+ * The buyer's order history (Account → My Orders), cursor-paginated infinite
+ * scroll. Auth-gated — guests never reach the screen body.
+ */
+export function useOrders() {
+  const authStatus = useAuthStore((s) => s.state.status);
+  return useInfiniteQuery({
+    queryKey: ['orders', 'list'],
+    queryFn: ({ pageParam }) => getOrders({ cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    enabled: authStatus === 'authenticated',
+  });
+}
 
 export function useOrder(orderId: string | undefined) {
   const pollStartedAt = useRef(Date.now());

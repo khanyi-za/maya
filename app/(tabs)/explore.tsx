@@ -165,9 +165,7 @@ export default function ExploreScreen() {
     router.push('/cart');
   };
 
-  const handleNotificationsPress = () => {
-    console.log('Notifications pressed');
-  };
+  const handleNotificationsPress = () => router.push('/notifications');
 
   const handleFeedTabChange = (tab: 'men' | 'women' | 'home-lifestyle') => {
     console.log('Feed tab changed to:', tab);

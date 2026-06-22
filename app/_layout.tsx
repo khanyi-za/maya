@@ -11,6 +11,7 @@ import { FilterProvider } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
 import { useCartStore } from '@/lib/cart-store';
 import { useAuthHydration, useForegroundRefresh } from '@/lib/auth';
+import { usePushNotificationTaps, usePushRegistration } from '@/lib/push';
 
 // Create QueryClient instance with mobile-optimized configuration
 const queryClient = new QueryClient({
@@ -48,6 +49,10 @@ export default function RootLayout() {
   // (docs/auth-mobile-guide.md §5.1, §9).
   useAuthHydration();
   useForegroundRefresh();
+
+  // Register the Expo push token once authenticated; route notification taps.
+  usePushRegistration();
+  usePushNotificationTaps();
 
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),

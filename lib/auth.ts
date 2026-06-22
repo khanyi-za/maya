@@ -15,6 +15,7 @@ import {
   saveRefreshToken,
   clearRefreshToken,
 } from './secure-storage';
+import { unregisterPushNotifications } from './push';
 
 export interface RegisterFields {
   email: string;
@@ -54,6 +55,9 @@ export async function verifyEmail(token: string): Promise<void> {
 /** Optimistic logout — local state clears instantly, API fires best-effort. */
 export async function logout(): Promise<void> {
   const refresh = await loadRefreshToken();
+
+  // Drop the push token while still authenticated (the DELETE needs the token).
+  await unregisterPushNotifications();
 
   await clearRefreshToken();
   useAuthStore.getState().setGuest();

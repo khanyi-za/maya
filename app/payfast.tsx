@@ -12,7 +12,10 @@ import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearPaymentSession, getPaymentSession } from '@/lib/payment-session';
 
-const RETURN_SCHEME = 'yiivaapp://payment-return';
+// Must match checkout.tsx's RETURN_URL/CANCEL_URL prefix. The WebView intercepts
+// navigation to this https sentinel (it never actually loads) to detect the
+// payment outcome — PayFast rejects custom-scheme return URLs.
+const RETURN_SCHEME = 'https://yiiva.co.za/payment-return';
 
 function escapeHtml(value: string): string {
   return value

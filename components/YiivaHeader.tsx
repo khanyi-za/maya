@@ -9,9 +9,16 @@ interface YiivaHeaderProps {
   onMenuPress: () => void;
   onCartPress: () => void;
   onNotificationsPress: () => void;
+  /** Unread notification count; renders a badge on the bell when > 0. */
+  unreadCount?: number;
 }
 
-export function YiivaHeader({ onMenuPress, onCartPress, onNotificationsPress }: YiivaHeaderProps) {
+export function YiivaHeader({
+  onMenuPress,
+  onCartPress,
+  onNotificationsPress,
+  unreadCount = 0,
+}: YiivaHeaderProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -33,6 +40,13 @@ export function YiivaHeader({ onMenuPress, onCartPress, onNotificationsPress }: 
       <View style={styles.rightActions}>
         <TouchableOpacity onPress={onNotificationsPress} style={styles.notificationsButton}>
           <IconSymbol size={24} name="bell" color="#333" />
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <ThemedText style={styles.badgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </ThemedText>
+            </View>
+          )}
         </TouchableOpacity>
         <TouchableOpacity onPress={onCartPress} style={styles.cartButton}>
           <IconSymbol size={24} name="cart" color="#333" />
@@ -75,6 +89,24 @@ const styles = StyleSheet.create({
   },
   notificationsButton: {
     padding: 8,
+  },
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   cartButton: {
     padding: 8,

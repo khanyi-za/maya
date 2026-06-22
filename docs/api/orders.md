@@ -234,7 +234,7 @@ Standard. Mobile polls this every 3s during payment-return window (up to 30s, th
 
 ---
 
-## 3. List my orders 🔴
+## 3. List my orders ✅
 
 ```
 GET /orders
@@ -242,7 +242,60 @@ GET /orders
 
 **Auth:** required · **Used by:** Account → My Orders
 
-Full spec drafted with the Account screen doc.
+> **Implemented in nuwa: `GET /api/orders`** — the buyer's order history. Lists
+> **consolidated maya orders (= PaymentGroups)**, newest first, cursor-paginated
+> on the PaymentGroup id, so each row's `id` feeds `GET /api/orders/:id` (§2),
+> cancel (§5), and tracking (§4) directly. A group belongs to the buyer when any
+> of its child orders does (one buyer per checkout). No server-side status filter
+> in v1 — the "Active" pill is a client-side filter.
+
+### Query parameters
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `limit` | number | `20` | Page size, max 50 (clamped server-side). |
+| `cursor` | string | — | Opaque cursor from the previous page's `pagination.nextCursor`. |
+
+### Response — 200 OK
+
+```json
+{
+  "success": true,
+  "data": {
+    "orders": [
+      {
+        "id": "ck_pg_abc",
+        "orderNumber": "YV-2026-000142",
+        "status": "CONFIRMED",
+        "itemCount": 3,
+        "total": 226400,
+        "currency": "ZAR",
+        "placedAt": "2026-06-05T14:23:00.000Z",
+        "storeName": "Tol'thema",
+        "storeCount": 1,
+        "image": "https://res.cloudinary.com/yiiva-dev/.../01.jpg"
+      }
+    ]
+  },
+  "pagination": { "limit": 20, "nextCursor": null, "hasMore": false }
+}
+```
+
+### Field notes
+
+- **`id`** — the PaymentGroup id. Use it for the detail / cancel / tracking calls.
+- **`status`** — the consolidated `MobileOrderStatus` (same value as §2's detail).
+- **`itemCount`** — total units across all child orders (summed quantities).
+- **`total`** — `amountGrossInCents` (subtotal + shipping across the whole checkout).
+- **`storeCount`** — `> 1` for a multi-merchant checkout; render `storeName +N more`.
+- **`image`** — the first child item's image, for the card thumbnail; `null` if none.
+
+### Errors
+
+| Status | Code | Cause |
+|---|---|---|
+| 401 | `AUTH_REQUIRED` | No / invalid token (guests can't see orders) |
+| 400 | `INVALID_CURSOR` | Malformed pagination cursor |
 
 ---
 

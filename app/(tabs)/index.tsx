@@ -33,9 +33,11 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { useUnreadNotificationCount } from '@/hooks/useNotificationQueries';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const unreadNotifications = useUnreadNotificationCount();
   const { activePrimaryFilter } = useFilter();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -65,7 +67,7 @@ export default function HomeScreen() {
 
   const handleMenuPress = () => setIsMenuVisible(true);
   const handleCartPress = () => router.push('/cart');
-  const handleNotificationsPress = () => console.log('Notifications pressed');
+  const handleNotificationsPress = () => router.push('/notifications');
   const handleCategoryChange = useCallback(
     (category: string) => setActiveCategory(category),
     []
@@ -299,6 +301,7 @@ export default function HomeScreen() {
         onMenuPress={handleMenuPress}
         onCartPress={handleCartPress}
         onNotificationsPress={handleNotificationsPress}
+        unreadCount={unreadNotifications.data?.unreadCount ?? 0}
       />
 
       <FeedTabs />

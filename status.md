@@ -1,8 +1,40 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-06-11
+> Last updated: 2026-06-19
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
+
+---
+
+## Demo-environment session (2026-06-19) — read first
+
+maya now runs against a **local DEMO backend** (`yiiva_demo` DB) on **:3005**,
+serving 6 real imported brands (sakanya, suhu, madebyfade, embedded, tolthema,
+fieldsstore) with full catalogues, logos, and Instagram videos. The importer
+that built it lives in the **nuwa** repo (`tools/demo-importer/`); full context
+in `../nuwa/docs/demo-importer/demo-importer-foundation.md` + `../nuwa/STATUS.md`.
+
+**maya changes committed this session (`2e362a1`):**
+- **Backend URL is now env-driven.** `lib/api-client.ts` (`API_BASE_URL`) and
+  `lib/api.ts` (`AUTH_BASE`) read `EXPO_PUBLIC_API_URL`, falling back to the old
+  platform default (`localhost:3000` / Android `10.0.2.2`). New **`maya/.env`**
+  (gitignored) sets `EXPO_PUBLIC_API_URL=http://localhost:3005` → the demo
+  backend. Delete `.env` (or set :3000) to return to the dev backend. Restart
+  Metro with `expo start -c` after changing.
+- **Video codec fix** (`lib/image-source.ts`): Instagram reels are **VP9**, which
+  iOS AVPlayer can't decode → product + hero videos silently didn't play. Now
+  inserts Cloudinary `vc_h264` into `/video/upload/` URLs so they deliver H.264.
+  Fixes both the product-detail gallery and the merchant-hero. **Not yet
+  simulator-verified** — confirm on reload (first play of each video lags ~1-2s
+  while Cloudinary transcodes). See foundation §21.
+
+**To run the demo:** start the demo nuwa on :3005 (see `../nuwa/STATUS.md`
+runbook), then `expo start -c`. Logins — buyer `khanyi@yiiva.co.za` /
+`khanyi@Suhu26`; merchants `<slug>@demo.yiiva.co.za` / `DemoPass1`.
+
+**maya follow-ups from this session:** hero videos past the cover don't autoplay
+on swipe (`HeroMediaItem` only play()s at player creation — small fix);
+physical-device demos need `EXPO_PUBLIC_API_URL` set to the Mac's LAN IP.
 
 ---
 
@@ -10,9 +42,8 @@
 
 **The buyer app is fully wired to the live nuwa backend** — every active screen
 runs on real data (`USE_FIXTURES = false`), auth is implemented end-to-end,
-checkout reaches the PayFast sandbox, and chat is real-time over socket.io;
-what remains is in-simulator verification, the chat-attachment Cloudinary
-preset, and committing the work.
+checkout reaches the PayFast sandbox, and chat is real-time over socket.io.
+(2026-06-19: also runs against the local demo backend on :3005 — see above.)
 
 ---
 

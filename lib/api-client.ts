@@ -321,6 +321,24 @@ export interface MobileOrder {
   };
 }
 
+/**
+ * Order history row (GET /api/orders — docs/api/orders.md §3). One row per
+ * consolidated maya order (= nuwa PaymentGroup); `id` feeds GET /api/orders/:id,
+ * cancel, and tracking. `storeCount > 1` means a multi-merchant checkout.
+ */
+export interface OrderListItem {
+  id: string;
+  orderNumber: string;
+  status: MobileOrderStatus;
+  itemCount: number;
+  total: number; // integer ZAR cents
+  currency: string;
+  placedAt: string; // ISO 8601
+  storeName: string;
+  storeCount: number;
+  image: string | null; // first item's image, for the card thumbnail
+}
+
 export interface TrackingEvent {
   at: string;
   location: string | null;
@@ -346,6 +364,32 @@ export interface OrderTracking {
   estimatedDeliveryFrom: string | null;
   estimatedDeliveryTo: string | null;
   events: TrackingEvent[];
+}
+
+/**
+ * In-app notification (GET /api/me/notifications). `data.orderId` is the maya
+ * order id (= PaymentGroup), so a tap deep-links into the order. Named
+ * `AppNotification` to avoid clashing with the DOM/Expo `Notification` types.
+ */
+export type AppNotificationType =
+  | 'ORDER_CONFIRMED'
+  | 'PAYMENT_FAILED'
+  | 'ORDER_SHIPPED'
+  | 'ORDER_DELIVERED'
+  | 'ORDER_CANCELLED'
+  | 'PAYMENT_RECEIVED'
+  | 'PROMOTION'
+  | 'SYSTEM'
+  | string;
+
+export interface AppNotification {
+  id: string;
+  type: AppNotificationType;
+  title: string;
+  body: string;
+  data: { orderId?: string; orderNumber?: string; [key: string]: unknown } | null;
+  isRead: boolean;
+  createdAt: string;
 }
 
 /**
@@ -907,6 +951,25 @@ export async function placeOrder(params: {
 }
 
 /**
+ * The signed-in buyer's order history (auth required, cursor-paginated, newest
+ * first). Backend: GET /api/orders (docs/api/orders.md §3)
+ */
+export async function getOrders(params?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<{ orders: OrderListItem[]; pagination: CursorPagination }> {
+  const queryParams = new URLSearchParams();
+  if (params?.limit) queryParams.append('limit', String(params.limit));
+  if (params?.cursor) queryParams.append('cursor', params.cursor);
+  const qs = queryParams.toString();
+
+  const { data, pagination } = await fetchAPIPaginated<{ orders: OrderListItem[] }>(
+    `/orders${qs ? `?${qs}` : ''}`
+  );
+  return { orders: data.orders, pagination };
+}
+
+/**
  * Consolidated order detail (auth required; 404 on cross-user access).
  * Backend: GET /api/orders/:id (docs/api/orders.md §2)
  */
@@ -937,6 +1000,67 @@ export async function getOrderTracking(
   orderId: string
 ): Promise<{ tracking: OrderTracking }> {
   return fetchAPI<{ tracking: OrderTracking }>(`/orders/${orderId}/tracking`);
+}
+
+// =============================================================================
+// API ENDPOINTS - NOTIFICATIONS
+// =============================================================================
+
+/** Cursor-paginated in-app inbox + live unread count. GET /api/me/notifications */
+export async function getNotifications(params?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<{
+  notifications: AppNotification[];
+  unreadCount: number;
+  pagination: CursorPagination;
+}> {
+  const queryParams = new URLSearchParams();
+  if (params?.limit) queryParams.append('limit', String(params.limit));
+  if (params?.cursor) queryParams.append('cursor', params.cursor);
+  const qs = queryParams.toString();
+
+  const { data, pagination } = await fetchAPIPaginated<{
+    notifications: AppNotification[];
+    unreadCount: number;
+  }>(`/me/notifications${qs ? `?${qs}` : ''}`);
+  return { notifications: data.notifications, unreadCount: data.unreadCount, pagination };
+}
+
+/** Unread badge count. GET /api/me/notifications/unread-count */
+export async function getUnreadNotificationCount(): Promise<{ unreadCount: number }> {
+  return fetchAPI<{ unreadCount: number }>(`/me/notifications/unread-count`);
+}
+
+/** Mark one notification read. PATCH /api/me/notifications/:id/read */
+export async function markNotificationRead(id: string): Promise<void> {
+  await fetchAPI(`/me/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+/** Mark every notification read. POST /api/me/notifications/read-all */
+export async function markAllNotificationsRead(): Promise<{ updated: number }> {
+  return fetchAPI<{ updated: number }>(`/me/notifications/read-all`, {
+    method: 'POST',
+  });
+}
+
+/** Register this device's Expo push token. POST /api/me/push-tokens */
+export async function registerPushToken(
+  token: string,
+  platform: 'ios' | 'android'
+): Promise<void> {
+  await fetchAPI(`/me/push-tokens`, {
+    method: 'POST',
+    body: JSON.stringify({ token, platform }),
+  });
+}
+
+/** Drop this device's push token (logout). DELETE /api/me/push-tokens */
+export async function unregisterPushToken(token: string): Promise<void> {
+  await fetchAPI(`/me/push-tokens`, {
+    method: 'DELETE',
+    body: JSON.stringify({ token }),
+  });
 }
 
 /**
@@ -1333,9 +1457,18 @@ export const api = {
   placeOrder,
 
   // Orders
+  getOrders,
   getOrder,
   cancelOrder,
   getOrderTracking,
+
+  // Notifications
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  registerPushToken,
+  unregisterPushToken,
 
   // Wishlist
   getBookmarks,
