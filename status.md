@@ -1,12 +1,66 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-06-19
+> Last updated: 2026-06-26
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
 
 ---
 
-## Demo-environment session (2026-06-19) — read first
+## 2026-06-26 — Search reels + account/notifications/orders — read first
+
+**Committed at `312168e`** ("2nd round of mobile integration"): the
+**`/account`** hub (profile + view-only addresses + sign out), the
+**`/orders`** My Orders list, the **`/notifications`** inbox + bell badge, and
+push registration (`lib/push.ts`, guarded — no-ops in Expo Go). All run against
+the demo backend on :3005.
+
+**UNCOMMITTED — the Search "reels" feature:**
+- **`app/(tabs)/search.tsx`** restructured: one browse ScrollView where the top
+  swaps categories ↔ trending on focus, and a **2-col reels grid stays below**.
+- **`components/ReelsGrid.tsx` + `ReelCard.tsx`** — the "Discover" grid; each
+  cell autoplays a muted product clip with the merchant name; tap → full-screen
+  feed at that index.
+- **`app/reels.tsx`** — full-screen TikTok/Insta vertical feed. Bottom-left:
+  merchant logo + brand + product name/price/description. Bottom-right vertical
+  action stack: **Buy** (→ product detail), **Like** (local), **Save**
+  (bookmark, server + auth). Plays only the on-screen reel.
+
+**▶ REELS PLAYBACK FIXED (2026-06-26, later) — root cause was the video SOURCE,
+not sizing/codec.** Reels were the only videos resolved via
+`Asset.fromModule(mod).localUri ?? .uri`. `localUri` is always null (nothing
+calls `downloadAsync()`), so it served a Metro dev-server URL that expo-video
+won't stream on the iOS Simulator → black grid + black full-screen feed, while
+every other (Cloudinary `{uri}`) video played fine.
+- **Fix = switch to the proven remote path.** `lib/reels-fixtures.ts` rebuilt:
+  `video` is now a **Cloudinary URL string** (was a `require()` number);
+  removed `reelVideoSource` + `expo-asset`. `ReelCard`/`reels.tsx` now build the
+  player from **`imageSource(reel.video)`** — the same helper the product
+  gallery + merchant hero already use (forces `vc_h264` → H.264 for iOS).
+- **REELS is now 10 REAL product reels** — only yiiva_demo products that own a
+  Cloudinary video (SAKANYA ×4, Suhu ×2, Tol'thema ×4), brands interleaved so
+  each grid row mixes brands. Buy → that exact product. This pre-stages the
+  dynamic feed (which will serve these same product videos → near-zero swap).
+- **`assets/reels/` (~22 MB) DELETED** — the 9 bundled mp4s are no longer
+  referenced. The 5 products without a Cloudinary video (Bravado set, Suhu
+  golfer, Fade sweatpants, Embedded legging, Bria mini) dropped out; to bring a
+  specific dropped clip back, upload it to `yiiva-dev` and reference the URL.
+- **Verified:** tsc clean for reels (only the pre-existing `VideoCard.tsx`
+  error remains); all 10 URLs return 200 + `codecs=avc1`.
+
+**⚠️ expo-video gotcha still valid (in CLAUDE.md footguns):** `VideoView`
+renders **black / zero-sized with `StyleSheet.absoluteFill`** — use explicit
+`width/height: '100%'`. (The "Asset.fromModule for require'd numbers" note is
+now moot for reels — we abandoned bundled assets for Cloudinary URLs.)
+
+**▶ NEXT:** **reload maya and visually confirm reels playback** (grid +
+full-screen). No `expo start -c` needed — the bundled-asset change is gone, so a
+normal JS reload picks it up. Videos are Cloudinary URLs (play without :3005),
+but Buy → product detail and Save need demo nuwa on :3005. Then **commit the
+reels feature**.
+
+---
+
+## Demo-environment session (2026-06-19)
 
 maya now runs against a **local DEMO backend** (`yiiva_demo` DB) on **:3005**,
 serving 6 real imported brands (sakanya, suhu, madebyfade, embedded, tolthema,

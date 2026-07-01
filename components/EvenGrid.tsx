@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View, Dimensions } from 'react-native';
-import { ThemedText } from './ThemedText';
+import { TouchableOpacity, View, Dimensions } from 'react-native';
+import { Text } from './ui/text';
 import { IconSymbol } from './ui/IconSymbol';
+import { useThemeColors } from '@/lib/theme';
 
 interface GridItem {
   id: string;
@@ -26,25 +27,39 @@ const itemWidth = (screenWidth - 48) / 2; // Account for padding and gap
 // can't window anyway and RN warns. The outer ScrollView owns scrolling +
 // infinite-scroll pagination.
 export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridProps) {
+  const colors = useThemeColors();
+
   const renderItem = (item: GridItem) => (
     <TouchableOpacity
       key={item.id}
-      style={styles.gridItem}
+      style={{ width: itemWidth }}
+      className="bg-card"
       onPress={() => onItemPress(item)}
       activeOpacity={0.8}
     >
-      <Image source={item.image} style={styles.productImage} />
-      <View style={styles.productInfo}>
-        <ThemedText style={styles.productTitle} numberOfLines={2}>
+      <Image
+        source={item.image}
+        style={{
+          width: '100%',
+          height: 220,
+          borderRadius: 8,
+          marginBottom: 8,
+          backgroundColor: colors.muted,
+        }}
+      />
+      <View className="px-1">
+        <Text variant="caption" numberOfLines={2} className="mb-1 font-semibold text-foreground">
           {item.title}
-        </ThemedText>
+        </Text>
         {item.brand && (
-          <ThemedText style={styles.brandName}>By {item.brand}</ThemedText>
+          <Text variant="micro" className="mb-1.5 italic">
+            By {item.brand}
+          </Text>
         )}
-        <View style={styles.bottomRow}>
-          <ThemedText style={styles.price}>{item.price}</ThemedText>
-          <TouchableOpacity style={styles.heartButton}>
-            <IconSymbol name="heart" size={18} color="#666" />
+        <View className="flex-row items-center justify-between">
+          <Text className="text-sm font-semibold text-foreground">{item.price}</Text>
+          <TouchableOpacity className="p-1">
+            <IconSymbol name="heart" size={18} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
       </View>
@@ -57,11 +72,11 @@ export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridPro
   }
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       {ListHeaderComponent && <ListHeaderComponent />}
-      <View style={styles.listContainer}>
+      <View className="px-4 pb-[100px] pt-4">
         {rows.map((rowItems, rowIndex) => (
-          <View key={rowItems[0]?.id ?? rowIndex} style={styles.row}>
+          <View key={rowItems[0]?.id ?? rowIndex} className="mb-5 flex-row justify-between">
             {rowItems.map(renderItem)}
           </View>
         ))}
@@ -69,62 +84,3 @@ export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridPro
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 100,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  gridItem: {
-    width: itemWidth,
-    backgroundColor: '#fff',
-  },
-  productImage: {
-    width: '100%',
-    height: 220,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  productInfo: {
-    paddingHorizontal: 4,
-  },
-  productTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-    lineHeight: 16,
-  },
-  brandName: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: '#666',
-    marginBottom: 6,
-    fontStyle: 'italic',
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  price: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  heartButton: {
-    padding: 4,
-  },
-});

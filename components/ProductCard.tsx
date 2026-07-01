@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { ThemedText } from './ThemedText';
-import { ThemedView } from './ThemedView';
+import { Pressable, TouchableOpacity, View } from 'react-native';
 import { IconSymbol } from './ui/IconSymbol';
+import { Text } from './ui/text';
+import { useThemeColors } from '@/lib/theme';
+import { haptics } from '@/lib/haptics';
 
 interface ProductCardProps {
   productImage: any;
@@ -24,14 +25,22 @@ interface ProductCardProps {
   isBookmarked?: boolean;
 }
 
+// YIIVA redesign — token-driven card, type-scale text, animated (press-scale)
+// like/bookmark, token icon colors (like = the shared like token, not #ff0000).
+// Kills the old negative-margin spacing hacks + unloaded font families.
+const CARD_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 8,
+  elevation: 2,
+};
+
 export function ProductCard({
   productImage,
-  profileImage,
   artistName,
   productTitle,
   price,
-  timestamp,
-  location,
   productId,
   artistId,
   onBookmark,
@@ -41,9 +50,9 @@ export function ProductCard({
   isBookmarked = false,
 }: ProductCardProps) {
   const router = useRouter();
+  const colors = useThemeColors();
 
   const handleArtistPress = () => {
-    // Use provided artistId or fallback to converting artist name
     const id = artistId || artistName.toLowerCase().replace(/\s+/g, '-');
     router.push(`/artist/${id}`);
   };
@@ -54,121 +63,66 @@ export function ProductCard({
       router.push(`/product/${productId}`);
     }
   };
+
   return (
-    <ThemedView style={styles.container}>
-      {/* Product Image */}
-      <TouchableOpacity style={styles.imageContainer} onPress={handleProductPress} activeOpacity={0.9}>
-        <Image source={productImage} style={styles.productImage} />
+    <View
+      className="mb-5 w-[97%] self-center overflow-hidden rounded-lg border border-border bg-card"
+      style={CARD_SHADOW}
+    >
+      <TouchableOpacity onPress={handleProductPress} activeOpacity={0.9}>
+        <Image
+          source={productImage}
+          style={{ width: '100%', height: 370, backgroundColor: colors.muted }}
+        />
       </TouchableOpacity>
-      
-      {/* Product Info Footer */}
-      <View style={styles.productFooter}>
-        <View style={styles.productInfo}>
-          <ThemedText style={styles.productTitle}>{productTitle}</ThemedText>
-          <View style={styles.artistRow}>
-            <TouchableOpacity onPress={handleArtistPress} activeOpacity={0.7} style={styles.artistNameContainer}>
-              <ThemedText style={styles.artistName}>
-                <ThemedText style={styles.byText}>By </ThemedText>
-                {artistName}
-              </ThemedText>
-            </TouchableOpacity>
-            <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.actionButton} onPress={onBookmark}>
-                <IconSymbol
-                  name={isBookmarked ? "bookmark.fill" : "bookmark"}
-                  size={24}
-                  color="#000"
-                />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={onLike}>
-                <IconSymbol
-                  name={isLiked ? "heart.fill" : "heart"}
-                  size={24}
-                  color={isLiked ? "#ff0000" : "#000"}
-                />
-              </TouchableOpacity>
-            </View>
+
+      <View className="gap-1 px-3 pb-2.5 pt-2">
+        <Text variant="label" numberOfLines={1}>
+          {productTitle}
+        </Text>
+
+        <View className="flex-row items-center justify-between">
+          <TouchableOpacity onPress={handleArtistPress} activeOpacity={0.7} className="flex-1">
+            <Text variant="caption" numberOfLines={1}>
+              <Text variant="caption" className="italic">
+                By{' '}
+              </Text>
+              {artistName}
+            </Text>
+          </TouchableOpacity>
+
+          <View className="flex-row gap-1">
+            <Pressable
+              onPress={() => {
+                haptics.light();
+                onBookmark?.();
+              }}
+              className="p-1.5 active:scale-90"
+            >
+              <IconSymbol
+                name={isBookmarked ? 'bookmark.fill' : 'bookmark'}
+                size={22}
+                color={isBookmarked ? colors.brand : colors.foreground}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                haptics.light();
+                onLike?.();
+              }}
+              className="p-1.5 active:scale-90"
+            >
+              <IconSymbol
+                name={isLiked ? 'heart.fill' : 'heart'}
+                size={22}
+                color={isLiked ? colors.like : colors.foreground}
+              />
+            </Pressable>
           </View>
-          <ThemedText style={styles.price}>{price}</ThemedText>
         </View>
+
+        <Text variant="label">{price}</Text>
       </View>
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 20,
-    backgroundColor: '#fff',
-    width: '97%',
-    alignSelf: 'center',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  artistName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#666',
-  },
-  byText: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#666',
-    fontStyle: 'italic',
-  },
-  imageContainer: {
-    marginBottom: 3.6,
-  },
-  productImage: {
-    width: '100%',
-    height: 370,
-    backgroundColor: '#f0f0f0',
-  },
-  productFooter: {
-    paddingVertical: 2.4,
-    paddingHorizontal: 12,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: -4,
-    lineHeight: 18,
-    fontFamily: 'RobotoMono',
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-    marginTop: -4,
-    lineHeight: 18,
-    fontFamily: 'Didot',
-  },
-  artistRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: -4,
-  },
-  artistNameContainer: {
-    flex: 1,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 8,
-  },
-});

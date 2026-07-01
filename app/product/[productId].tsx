@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  Text,
   ActivityIndicator,
   Alert,
   RefreshControl,
@@ -26,8 +24,18 @@ import { useAddCartItem } from '@/hooks/useCartQueries';
 import { useAuthStore } from '@/lib/auth-store';
 import { useSocialStore } from '@/lib/social-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text } from '@/components/ui/text';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useThemeColors } from '@/lib/theme';
+import { haptics } from '@/lib/haptics';
+import { cn } from '@/lib/utils';
 
 const { width } = Dimensions.get('window');
+
+// Media fill dimensions kept as a style object — expo-image / expo-video take a
+// `style`, and these are layout dimensions (not design tokens).
+const MEDIA_FILL = { width: '100%', height: '100%' } as const;
 
 function MediaItem({
   media,
@@ -72,8 +80,8 @@ function MediaItem({
   if (media.type === 'image') {
     if (!source) {
       return (
-        <View style={styles.videoPlaceholder}>
-          <Text style={styles.videoText}>Image not found</Text>
+        <View className="w-full h-full bg-black items-center justify-center">
+          <Text variant="caption" className="text-white">Image not found</Text>
         </View>
       );
     }
@@ -81,7 +89,7 @@ function MediaItem({
     return (
       <Image
         source={source}
-        style={styles.heroImage}
+        style={MEDIA_FILL}
         contentFit="cover"
       />
     );
@@ -90,27 +98,27 @@ function MediaItem({
   if (media.type === 'video') {
     if (!source) {
       return (
-        <View style={styles.videoPlaceholder}>
-          <Text style={styles.videoText}>Video not found</Text>
+        <View className="w-full h-full bg-black items-center justify-center">
+          <Text variant="caption" className="text-white">Video not found</Text>
         </View>
       );
     }
 
     return (
-      <View style={styles.videoContainer}>
+      <View className="w-full h-full relative">
         <VideoView
           player={player}
-          style={styles.heroImage}
+          style={MEDIA_FILL}
           contentFit="cover"
           nativeControls={false}
           allowsFullscreen={false}
         />
         <TouchableOpacity
-          style={styles.playPauseButton}
+          className="absolute bottom-[100px] left-1/2 -ml-8 z-10"
           onPress={togglePlayPause}
           activeOpacity={0.8}
         >
-          <View style={styles.playPauseIconContainer}>
+          <View className="w-16 h-16 rounded-full bg-black/60 items-center justify-center border-2 border-white/80">
             <IconSymbol
               name={isPlaying ? 'pause.fill' : 'play.fill'}
               size={32}
@@ -123,8 +131,8 @@ function MediaItem({
   }
 
   return (
-    <View style={styles.videoPlaceholder}>
-      <Text style={styles.videoText}>Media not available</Text>
+    <View className="w-full h-full bg-black items-center justify-center">
+      <Text variant="caption" className="text-white">Media not available</Text>
     </View>
   );
 }
@@ -138,6 +146,7 @@ export default function ProductScreen() {
   const authStatus = useAuthStore((s) => s.state.status);
   const { toggleLike, isLiked } = useSocialStore();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
 
   const detailQuery = useProductDetail(productId);
   const similarQuery = useSimilarProducts(productId);
@@ -173,6 +182,7 @@ export default function ProductScreen() {
       },
       {
         onSuccess: () => {
+          haptics.success();
           Alert.alert('Added to cart', `${product.name} is in your cart.`);
         },
         onError: (err) => {
@@ -194,8 +204,18 @@ export default function ProductScreen() {
 
   if (detailQuery.isPending) {
     return (
-      <View style={[styles.container, styles.stateContainer]}>
-        <ActivityIndicator size="large" color="#333" />
+      <View className="flex-1 bg-background">
+        <Skeleton className="w-full" style={{ height: width * 1.3 }} />
+        <View className="px-4 pt-4 gap-3">
+          <Skeleton className="h-6 w-2/3" />
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="mt-2 h-20 w-full" />
+          <View className="mt-2 flex-row gap-3">
+            <Skeleton className="h-11 w-16 rounded-full" />
+            <Skeleton className="h-11 w-16 rounded-full" />
+            <Skeleton className="h-11 w-16 rounded-full" />
+          </View>
+        </View>
       </View>
     );
   }
@@ -204,27 +224,21 @@ export default function ProductScreen() {
     const isGone =
       detailQuery.error instanceof APIError && detailQuery.error.status === 404;
     return (
-      <View style={[styles.container, styles.stateContainer]}>
-        <Text style={styles.stateTitle}>
+      <View className="flex-1 bg-background items-center justify-center px-10 gap-4">
+        <Text variant="heading" className="text-center">
           {isGone ? 'This product is no longer available' : "Couldn't load this product"}
         </Text>
         {isGone ? (
-          <TouchableOpacity
-            style={styles.stateButton}
-            onPress={() => router.dismissTo('/(tabs)')}
-          >
-            <Text style={styles.stateButtonText}>Back to Home</Text>
-          </TouchableOpacity>
+          <Button variant="primary" onPress={() => router.dismissTo('/(tabs)')}>
+            Back to Home
+          </Button>
         ) : (
-          <TouchableOpacity
-            style={styles.stateButton}
-            onPress={() => detailQuery.refetch()}
-          >
-            <Text style={styles.stateButtonText}>Retry</Text>
-          </TouchableOpacity>
+          <Button variant="primary" onPress={() => detailQuery.refetch()}>
+            Retry
+          </Button>
         )}
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.stateBackLink}>Go back</Text>
+          <Text variant="caption" className="underline">Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -234,28 +248,40 @@ export default function ProductScreen() {
   const liked = isLiked(product.id);
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={detailQuery.isRefetching}
             onRefresh={() => detailQuery.refetch()}
+            tintColor={colors.mutedForeground}
           />
         }
       >
         {/* Hero Media Carousel */}
-        <View style={[styles.heroSection, { height: width * 1.3 + insets.top }]}>
-          <TouchableOpacity style={[styles.backIcon, { top: insets.top + 16 }]} onPress={() => router.back()}>
-            <Text style={styles.backIconText}>←</Text>
+        <View className="relative" style={{ height: width * 1.3 + insets.top }}>
+          <TouchableOpacity
+            className="absolute left-4 w-10 h-10 rounded-full bg-white/90 items-center justify-center z-10"
+            style={{ top: insets.top + 16 }}
+            onPress={() => router.back()}
+          >
+            <Text className="text-2xl text-black">←</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.shareIcon, { top: insets.top + 16 }]}>
-            <Text style={styles.shareIconText}>↗</Text>
+          <TouchableOpacity
+            className="absolute right-[72px] w-10 h-10 rounded-full bg-white/90 items-center justify-center z-10"
+            style={{ top: insets.top + 16 }}
+          >
+            <Text className="text-xl text-black">↗</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.cartIcon, { top: insets.top + 16 }]} onPress={() => router.push('/cart')}>
-            <Text style={styles.cartIconText}>🛒</Text>
+          <TouchableOpacity
+            className="absolute right-4 w-10 h-10 rounded-full bg-white/90 items-center justify-center z-10"
+            style={{ top: insets.top + 16 }}
+            onPress={() => router.push('/cart')}
+          >
+            <Text className="text-xl">🛒</Text>
           </TouchableOpacity>
 
           <ScrollView
@@ -269,7 +295,7 @@ export default function ProductScreen() {
             scrollEventThrottle={16}
           >
             {product.media.map((media, index) => (
-              <View key={index} style={[styles.mediaItem, { height: width * 1.3 + insets.top }]}>
+              <View key={index} style={{ width, height: width * 1.3 + insets.top }}>
                 <MediaItem
                   media={media}
                   index={index}
@@ -279,138 +305,147 @@ export default function ProductScreen() {
             ))}
           </ScrollView>
 
-          <View style={styles.zoomIndicator}>
-            <Text style={styles.zoomText}>TAP TO ZOOM</Text>
+          <View className="absolute bottom-20 left-4 bg-white px-3 py-1.5 rounded">
+            <Text className="text-xs font-semibold text-black">TAP TO ZOOM</Text>
           </View>
 
-          <TouchableOpacity style={styles.heartIcon} onPress={() => toggleLike(product.id)}>
-            <Text style={[styles.heartText, liked && styles.heartTextLiked]}>
+          <TouchableOpacity
+            className="absolute bottom-20 right-4 w-14 h-14 rounded-full bg-white items-center justify-center"
+            onPress={() => toggleLike(product.id)}
+          >
+            <Text style={{ fontSize: 28, color: liked ? colors.like : undefined }}>
               {liked ? '♥' : '♡'}
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.dotsContainer}>
+          <View className="absolute bottom-[50px] left-0 right-0 flex-row justify-center gap-1.5">
             {product.media.map((_, index) => (
               <View
                 key={index}
-                style={[
-                  styles.dot,
-                  index === currentMediaIndex && styles.activeDot,
-                ]}
+                className={cn(
+                  'w-1.5 h-1.5 rounded-full',
+                  index === currentMediaIndex ? 'bg-white' : 'bg-white/40',
+                )}
               />
             ))}
           </View>
         </View>
 
         {/* Product Info */}
-        <View style={styles.infoSection}>
-          <View style={styles.productHeader}>
-            <View style={styles.productTitleContainer}>
-              <Text style={styles.productName}>{product.name}</Text>
+        <View className="px-4">
+          <View className="py-4 border-b border-border">
+            <View className="flex-row justify-between items-start mb-1">
+              <Text variant="heading" className="flex-1 mr-2">{product.name}</Text>
               <TouchableOpacity>
-                <Text style={styles.moreLink}>MORE →</Text>
+                <Text variant="caption" className="text-brand">MORE →</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={() => router.push(`/artist/${product.merchant.username}`)}>
-              <Text style={styles.merchantName}>By {product.merchant.displayName}</Text>
+              <Text variant="caption" className="italic">By {product.merchant.displayName}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Description */}
           {product.description ? (
-            <View style={styles.descriptionSection}>
-              <Text style={styles.descriptionText}>{product.description}</Text>
+            <View className="py-4 border-b border-border">
+              <Text variant="body" className="leading-[21px]">{product.description}</Text>
             </View>
           ) : null}
 
           {/* Payment Options */}
-          <View style={styles.paymentSection}>
-            <View style={styles.paymentHeader}>
-              <Text style={styles.paymentTitle}>Get it now, pay later</Text>
-              <Text style={styles.paymentOptions}>3 OPTIONS →</Text>
+          <View className="py-4 border-b border-border">
+            <View className="flex-row justify-between items-center mb-2">
+              <Text variant="label">Get it now, pay later</Text>
+              <Text variant="caption" className="text-brand">3 OPTIONS →</Text>
             </View>
-            <Text style={styles.paymentDescription}>
+            <Text variant="caption">
               Pay using our credit options, Payflex, PayJustNow, Mobicred or RCS.
             </Text>
           </View>
 
           {/* Size Selector */}
           {variants.length > 0 && (
-            <View style={styles.sizeSection}>
-              <View style={styles.sizeHeader}>
-                <Text style={styles.sizeTitle}>Select a size</Text>
+            <View className="py-4 border-b border-border">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text variant="label">Select a size</Text>
                 <TouchableOpacity>
-                  <Text style={styles.sizeInfo}>SIZE INFO →</Text>
+                  <Text variant="caption" className="text-brand">SIZE INFO →</Text>
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.sizeOptions}>
-                {variants.map((variant) => (
-                  <TouchableOpacity
-                    key={variant.id}
-                    style={[
-                      styles.sizeButton,
-                      selectedVariantId === variant.id && styles.sizeButtonActive,
-                      !variant.available && styles.sizeButtonDisabled,
-                    ]}
-                    onPress={() => variant.available && setSelectedVariantId(variant.id)}
-                    disabled={!variant.available}
-                  >
-                    <Text
-                      style={[
-                        styles.sizeText,
-                        !variant.available && styles.sizeTextDisabled,
-                      ]}
+              <View className="flex-row flex-wrap gap-3 mb-4">
+                {variants.map((variant) => {
+                  const isSelected = selectedVariantId === variant.id;
+                  return (
+                    <TouchableOpacity
+                      key={variant.id}
+                      className={cn(
+                        'px-6 py-3 rounded-full',
+                        isSelected
+                          ? 'border-2 border-brand bg-brand-subtle'
+                          : 'border border-border',
+                        !variant.available && 'bg-muted border-border',
+                      )}
+                      onPress={() => variant.available && setSelectedVariantId(variant.id)}
+                      disabled={!variant.available}
                     >
-                      {variant.size}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        variant="label"
+                        className={cn(
+                          isSelected && 'text-brand',
+                          !variant.available && 'text-muted-foreground line-through',
+                        )}
+                      >
+                        {variant.size}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              <TouchableOpacity style={styles.findFitButton}>
-                <Text style={styles.findFitIcon}>📏</Text>
-                <Text style={styles.findFitText}>FIND YOUR FIT →</Text>
+              <TouchableOpacity className="flex-row items-center py-3">
+                <Text className="text-xl mr-2">📏</Text>
+                <Text variant="label" className="text-brand">FIND YOUR FIT →</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {/* Shipping */}
-          <View style={styles.shippingSection}>
-            <View style={styles.shippingHeader}>
-              <Text style={styles.shippingTitle}>Shipping</Text>
+          <View className="py-4 border-b border-border">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text variant="label">Shipping</Text>
               <TouchableOpacity>
-                <Text style={styles.shippingLink}>When will I get it? →</Text>
+                <Text variant="caption" className="text-brand">When will I get it? →</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.shippingOption}>
-              <Text style={styles.shippingIcon}>🚚</Text>
-              <View style={styles.shippingDetails}>
-                <Text style={styles.shippingText}>FREE Standard delivery on orders over R650.</Text>
-                <Text style={styles.shippingSubtext}>Faster options available.</Text>
+            <View className="flex-row mb-4">
+              <Text className="text-2xl mr-3">🚚</Text>
+              <View className="flex-1">
+                <Text variant="body" className="font-medium mb-0.5">FREE Standard delivery on orders over R650.</Text>
+                <Text variant="caption">Faster options available.</Text>
               </View>
             </View>
 
-            <View style={styles.shippingOption}>
-              <Text style={styles.shippingIcon}>🏪</Text>
-              <View style={styles.shippingDetails}>
-                <Text style={styles.shippingText}>FREE Collection on orders over R650.</Text>
-                <Text style={styles.shippingSubtext}>Open 7 days a week.</Text>
+            <View className="flex-row mb-4">
+              <Text className="text-2xl mr-3">🏪</Text>
+              <View className="flex-1">
+                <Text variant="body" className="font-medium mb-0.5">FREE Collection on orders over R650.</Text>
+                <Text variant="caption">Open 7 days a week.</Text>
               </View>
             </View>
           </View>
 
           {/* Returns */}
-          <View style={styles.returnsSection}>
-            <Text style={styles.returnsTitle}>Returns</Text>
-            <Text style={styles.returnsText}>{product.returnPolicy.displayText}</Text>
+          <View className="py-4 border-b border-border">
+            <Text variant="label" className="mb-2">Returns</Text>
+            <Text variant="caption">{product.returnPolicy.displayText}</Text>
           </View>
 
           {/* Similar Items — hidden entirely if the call fails or is empty */}
           {similarProducts.length > 0 && (
-            <View style={styles.similarSection}>
-              <Text style={styles.similarTitle}>Similar Items</Text>
+            <View className="py-4">
+              <Text variant="heading" className="mb-4">Similar Items</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {similarProducts.map((item) => {
                   const source = imageSource(item.image);
@@ -418,22 +453,26 @@ export default function ProductScreen() {
                   return (
                     <TouchableOpacity
                       key={item.id}
-                      style={styles.similarItem}
+                      className="w-[200px] mr-3"
                       onPress={() => router.push(`/product/${item.id}`)}
                     >
                       {source ? (
                         <Image
                           source={source}
-                          style={styles.similarImage}
+                          style={{ width: 200, height: 280 }}
+                          className="rounded-lg mb-2 bg-muted"
                           contentFit="cover"
                         />
                       ) : (
-                        <View style={[styles.similarImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }]}>
-                          <Text style={{ color: '#999' }}>No image</Text>
+                        <View
+                          className="rounded-lg mb-2 bg-muted items-center justify-center"
+                          style={{ width: 200, height: 280 }}
+                        >
+                          <Text variant="caption">No image</Text>
                         </View>
                       )}
-                      <Text style={styles.similarMerchant}>By {item.merchant.displayName}</Text>
-                      <Text style={styles.similarPrice}>{formatZAR(item.price)}</Text>
+                      <Text variant="caption" className="italic mb-1">By {item.merchant.displayName}</Text>
+                      <Text variant="label" className="font-semibold text-foreground">{formatZAR(item.price)}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -441,468 +480,26 @@ export default function ProductScreen() {
             </View>
           )}
 
-          <View style={styles.bottomSpacing} />
+          <View className="h-20" />
         </View>
       </ScrollView>
 
       {/* Fixed Bottom Bar */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        <Text style={styles.bottomPrice}>{formatZAR(product.price)}</Text>
-        <TouchableOpacity
-          style={[
-            styles.addToCartButton,
-            (soldOut || addItem.isPending) && styles.addToCartButtonDisabled,
-          ]}
-          onPress={handleAddToCart}
+      <View
+        className="absolute bottom-0 left-0 right-0 flex-row items-center bg-card px-4 py-3 border-t border-border"
+        style={{ paddingBottom: insets.bottom + 12 }}
+      >
+        <Text className="text-[24px] font-bold text-foreground mr-4">{formatZAR(product.price)}</Text>
+        <Button
+          variant="brand"
+          className="flex-1"
+          loading={addItem.isPending}
           disabled={soldOut || addItem.isPending}
+          onPress={handleAddToCart}
         >
-          <Text style={styles.cartButtonIcon}>🛒</Text>
-          <Text style={styles.addToCartText}>
-            {soldOut ? 'SOLD OUT' : addItem.isPending ? 'ADDING…' : 'ADD TO CART'}
-          </Text>
-        </TouchableOpacity>
+          {soldOut ? 'Sold out' : addItem.isPending ? 'Adding…' : '🛒  Add to cart'}
+        </Button>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-
-  // Loading / error states
-  stateContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  stateTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-  },
-  stateButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  stateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  stateBackLink: {
-    fontSize: 14,
-    color: '#666',
-    textDecorationLine: 'underline',
-  },
-
-  // Hero Section
-  heroSection: {
-    position: 'relative',
-  },
-  backIcon: {
-    position: 'absolute',
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  backIconText: {
-    fontSize: 24,
-    color: '#000',
-  },
-  shareIcon: {
-    position: 'absolute',
-    right: 72,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  shareIconText: {
-    fontSize: 20,
-    color: '#000',
-  },
-  cartIcon: {
-    position: 'absolute',
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  cartIconText: {
-    fontSize: 20,
-  },
-  mediaItem: {
-    width: width,
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  videoContainer: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-  },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  playPauseButton: {
-    position: 'absolute',
-    bottom: 100,
-    left: '50%',
-    marginLeft: -32,
-    zIndex: 10,
-  },
-  playPauseIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-  },
-  zoomIndicator: {
-    position: 'absolute',
-    bottom: 80,
-    left: 16,
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  zoomText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  heartIcon: {
-    position: 'absolute',
-    bottom: 80,
-    right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heartText: {
-    fontSize: 28,
-  },
-  heartTextLiked: {
-    color: '#e0245e',
-  },
-  dotsContainer: {
-    position: 'absolute',
-    bottom: 50,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#ccc',
-  },
-  activeDot: {
-    backgroundColor: '#fff',
-  },
-
-  // Product Info
-  infoSection: {
-    paddingHorizontal: 16,
-  },
-  productHeader: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  productTitleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  productName: {
-    fontSize: 18,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 8,
-  },
-  moreLink: {
-    fontSize: 14,
-    color: '#666',
-  },
-  merchantName: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-  },
-
-  // Description
-  descriptionSection: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: '#444',
-    lineHeight: 21,
-  },
-
-  // Payment Options
-  paymentSection: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  paymentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  paymentTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  paymentOptions: {
-    fontSize: 14,
-    color: '#666',
-  },
-  paymentDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-
-  // Size Selector
-  sizeSection: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  sizeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sizeTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  sizeInfo: {
-    fontSize: 14,
-    color: '#666',
-  },
-  sizeOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-  },
-  sizeButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 24,
-  },
-  sizeButtonActive: {
-    borderColor: '#000',
-    borderWidth: 2,
-  },
-  sizeButtonDisabled: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#eee',
-  },
-  sizeText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  sizeTextDisabled: {
-    color: '#bbb',
-    textDecorationLine: 'line-through',
-  },
-  findFitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  findFitIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  findFitText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Shipping
-  shippingSection: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  shippingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  shippingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  shippingLink: {
-    fontSize: 14,
-    color: '#666',
-  },
-  shippingOption: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  shippingIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  shippingDetails: {
-    flex: 1,
-  },
-  shippingText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  shippingSubtext: {
-    fontSize: 13,
-    color: '#666',
-  },
-
-  // Returns
-  returnsSection: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  returnsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  returnsText: {
-    fontSize: 14,
-    color: '#666',
-  },
-
-  // Similar Items
-  similarSection: {
-    paddingVertical: 16,
-  },
-  similarTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  similarItem: {
-    width: 200,
-    marginRight: 12,
-  },
-  similarImage: {
-    width: 200,
-    height: 280,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  similarMerchant: {
-    fontSize: 13,
-    color: '#666',
-    fontStyle: 'italic',
-    marginBottom: 4,
-  },
-  similarPrice: {
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'Didot',
-  },
-
-  bottomSpacing: {
-    height: 80,
-  },
-
-  // Fixed Bottom Bar
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  bottomPrice: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginRight: 16,
-    fontFamily: 'Didot',
-  },
-  addToCartButton: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#000',
-    paddingVertical: 12,
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addToCartButtonDisabled: {
-    backgroundColor: '#999',
-  },
-  cartButtonIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  addToCartText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-});

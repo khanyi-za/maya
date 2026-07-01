@@ -4,19 +4,20 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
 import { useCancelOrder, useOrder } from '@/hooks/useOrderQueries';
 import { APIError } from '@/lib/api-client';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
+import { ORDER_STATUS } from '@/lib/order-status';
+import { useThemeColors } from '@/lib/theme';
 
 const LONG_WAIT_MS = 2 * 60 * 1000;
 
@@ -33,6 +34,7 @@ function formatDeliveryDate(iso: string | null): string {
 export default function OrderSuccessScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { orderId } = useLocalSearchParams<{ orderId?: string }>();
 
   const orderQuery = useOrder(orderId);
@@ -75,35 +77,38 @@ export default function OrderSuccessScreen() {
   };
 
   const renderCentered = (children: React.ReactNode) => (
-    <View style={[styles.centered, { paddingTop: insets.top }]}>{children}</View>
+    <View className="flex-1 items-center justify-center gap-4 px-10" style={{ paddingTop: insets.top }}>
+      {children}
+    </View>
   );
 
   // ── Missing / not found / loading / error states ──
 
   if (!orderId) {
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
         {renderCentered(
           <>
-            <ThemedText style={styles.stateTitle}>
+            <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
+            <Text variant="title" className="text-center">
               We couldn&apos;t find that order
-            </ThemedText>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleContinueShopping}>
-              <ThemedText style={styles.primaryButtonText}>Browse YIIVA</ThemedText>
-            </TouchableOpacity>
+            </Text>
+            <Button variant="brand" className="px-10" onPress={handleContinueShopping}>
+              Browse YIIVA
+            </Button>
           </>
         )}
-      </ThemedView>
+      </View>
     );
   }
 
   if (orderQuery.isPending) {
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        {renderCentered(<ActivityIndicator size="large" color="#333" />)}
-      </ThemedView>
+        {renderCentered(<ActivityIndicator size="large" color={colors.mutedForeground} />)}
+      </View>
     );
   }
 
@@ -111,24 +116,24 @@ export default function OrderSuccessScreen() {
     const notFound =
       orderQuery.error instanceof APIError && orderQuery.error.status === 404;
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
         {renderCentered(
           <>
-            <ThemedText style={styles.stateTitle}>
+            <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
+            <Text variant="title" className="text-center">
               {notFound ? "We couldn't find that order" : "Couldn't load your order"}
-            </ThemedText>
-            <TouchableOpacity
-              style={styles.primaryButton}
+            </Text>
+            <Button
+              variant="brand"
+              className="px-10"
               onPress={() => (notFound ? handleContinueShopping() : orderQuery.refetch())}
             >
-              <ThemedText style={styles.primaryButtonText}>
-                {notFound ? 'Browse YIIVA' : 'Retry'}
-              </ThemedText>
-            </TouchableOpacity>
+              {notFound ? 'Browse YIIVA' : 'Retry'}
+            </Button>
           </>
         )}
-      </ThemedView>
+      </View>
     );
   }
 
@@ -136,28 +141,28 @@ export default function OrderSuccessScreen() {
 
   if (status === 'PENDING_PAYMENT') {
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
         {renderCentered(
           <>
-            <ActivityIndicator size="large" color="#333" />
-            <ThemedText style={styles.stateTitle}>Confirming your payment…</ThemedText>
-            <ThemedText style={styles.stateText}>
+            <ActivityIndicator size="large" color={colors.mutedForeground} />
+            <Text variant="title" className="text-center">
+              Confirming your payment…
+            </Text>
+            <Text variant="body" className="text-center text-muted-foreground">
               {longWait
                 ? "Still processing. We'll confirm your order shortly — you can keep shopping in the meantime."
                 : 'This usually takes a few seconds.'}
-            </ThemedText>
-            <ThemedText style={styles.orderNumberHint}>
-              Order {order.orderNumber}
-            </ThemedText>
+            </Text>
+            <Text variant="caption">Order {order.orderNumber}</Text>
             {longWait && (
-              <TouchableOpacity style={styles.primaryButton} onPress={handleContinueShopping}>
-                <ThemedText style={styles.primaryButtonText}>Continue Shopping</ThemedText>
-              </TouchableOpacity>
+              <Button variant="brand" className="px-10" onPress={handleContinueShopping}>
+                Continue Shopping
+              </Button>
             )}
           </>
         )}
-      </ThemedView>
+      </View>
     );
   }
 
@@ -165,114 +170,133 @@ export default function OrderSuccessScreen() {
 
   if (status === 'PAYMENT_FAILED' || status === 'CANCELLED') {
     const failed = status === 'PAYMENT_FAILED';
+    const meta = ORDER_STATUS[status];
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
         {renderCentered(
           <>
             <IconSymbol
               name={failed ? 'xmark.circle.fill' : 'slash.circle'}
               size={72}
-              color={failed ? '#b3261e' : '#999'}
+              color={failed ? colors.danger : colors.mutedForeground}
             />
-            <ThemedText style={styles.stateTitle}>
+            <Badge tone={meta.tone}>{meta.label}</Badge>
+            <Text variant="title" className="text-center">
               {failed ? "Payment didn't complete" : 'Order cancelled'}
-            </ThemedText>
-            <ThemedText style={styles.stateText}>
+            </Text>
+            <Text variant="body" className="text-center text-muted-foreground">
               {failed
                 ? 'Your order is unpaid. You can cancel it and try again from your cart.'
                 : `Order ${order.orderNumber} has been cancelled.`}
-            </ThemedText>
+            </Text>
             {failed && (
-              <TouchableOpacity
-                style={styles.dangerButton}
+              <Button
+                variant="danger"
+                className="px-10"
+                loading={cancelMutation.isPending}
                 onPress={handleCancelOrder}
-                disabled={cancelMutation.isPending}
               >
-                <ThemedText style={styles.dangerButtonText}>
-                  {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
-                </ThemedText>
-              </TouchableOpacity>
+                {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
+              </Button>
             )}
-            <TouchableOpacity style={styles.primaryButton} onPress={handleContinueShopping}>
-              <ThemedText style={styles.primaryButtonText}>Continue Shopping</ThemedText>
-            </TouchableOpacity>
+            <Button variant="brand" className="px-10" onPress={handleContinueShopping}>
+              Continue Shopping
+            </Button>
           </>
         )}
-      </ThemedView>
+      </View>
     );
   }
 
   // ── Confirmed (and beyond) — the success layout ──
 
   return (
-    <ThemedView style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="items-center px-10 pb-10" style={{ paddingTop: insets.top + 60 }}>
           {/* Success Icon */}
-          <View style={styles.successIcon}>
-            <IconSymbol name="checkmark.circle.fill" size={80} color="#4CAF50" />
+          <View className="mb-8 h-24 w-24 items-center justify-center rounded-full bg-success-subtle">
+            <IconSymbol name="checkmark.circle.fill" size={80} color={colors.success} />
           </View>
 
           {/* Success Message */}
-          <ThemedText style={styles.successTitle}>Order Placed Successfully!</ThemedText>
-          <ThemedText style={styles.successSubtitle}>
+          <Text variant="title" className="mb-3 text-center">
+            Order Placed Successfully!
+          </Text>
+          <Text variant="body" className="mb-10 text-center text-muted-foreground">
             Thank you for your order. The brands are getting it ready.
-          </ThemedText>
+          </Text>
 
           {/* Order Details */}
-          <View style={styles.orderDetails}>
-            <View style={styles.orderDetailRow}>
-              <ThemedText style={styles.orderDetailLabel}>Order Number:</ThemedText>
-              <ThemedText style={styles.orderDetailValue}>{order.orderNumber}</ThemedText>
+          <View className="mb-8 w-full rounded-xl bg-muted p-5">
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">
+                Order Number:
+              </Text>
+              <Text variant="label">{order.orderNumber}</Text>
             </View>
-            <View style={styles.orderDetailRow}>
-              <ThemedText style={styles.orderDetailLabel}>Total Amount:</ThemedText>
-              <ThemedText style={styles.orderDetailValue}>{formatZAR(order.total)}</ThemedText>
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">
+                Total Amount:
+              </Text>
+              <Text variant="label">{formatZAR(order.total)}</Text>
             </View>
-            <View style={styles.orderDetailRow}>
-              <ThemedText style={styles.orderDetailLabel}>Items:</ThemedText>
-              <ThemedText style={styles.orderDetailValue}>
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">
+                Items:
+              </Text>
+              <Text variant="label">
                 {order.items.reduce((sum, item) => sum + item.quantity, 0)}
-              </ThemedText>
+              </Text>
             </View>
-            <View style={styles.orderDetailRow}>
-              <ThemedText style={styles.orderDetailLabel}>Estimated Delivery:</ThemedText>
-              <ThemedText style={styles.orderDetailValue}>
+            <View className="flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">
+                Estimated Delivery:
+              </Text>
+              <Text variant="label">
                 {formatDeliveryDate(order.shipping.estimatedDelivery)}
-              </ThemedText>
+              </Text>
             </View>
           </View>
 
           {/* Order Items */}
-          <View style={styles.orderItems}>
-            <ThemedText style={styles.orderItemsTitle}>Your Order</ThemedText>
+          <View className="mb-8 w-full">
+            <Text variant="heading" className="mb-4 text-center">
+              Your Order
+            </Text>
             {order.items.map((item) => {
               const imageAsset = imageSource(item.image);
               return (
-                <View key={item.id} style={styles.orderItemCard}>
+                <View key={item.id} className="mb-3 flex-row gap-3 rounded-xl bg-muted p-3">
                   {imageAsset ? (
-                    <Image source={imageAsset} style={styles.orderItemImage} contentFit="cover" />
+                    <Image
+                      source={imageAsset}
+                      style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
+                      contentFit="cover"
+                    />
                   ) : (
-                    <View style={styles.orderItemImagePlaceholder} />
+                    <View className="h-20 w-[60px] rounded-lg bg-muted" />
                   )}
-                  <View style={styles.orderItemDetails}>
-                    <ThemedText style={styles.orderItemName} numberOfLines={2}>
+                  <View className="flex-1">
+                    <Text variant="label" numberOfLines={2} className="mb-1">
                       {item.name}
-                    </ThemedText>
-                    <ThemedText style={styles.orderItemMerchant}>
+                    </Text>
+                    <Text variant="caption" className="mb-1 italic">
                       By {item.merchant.displayName}
-                    </ThemedText>
+                    </Text>
                     {item.size && (
-                      <ThemedText style={styles.orderItemSize}>Size: {item.size}</ThemedText>
+                      <Text variant="caption" className="mb-2">
+                        Size: {item.size}
+                      </Text>
                     )}
-                    <View style={styles.orderItemPriceRow}>
-                      <ThemedText style={styles.orderItemQuantity}>Qty: {item.quantity}</ThemedText>
-                      <ThemedText style={styles.orderItemPrice}>
-                        {formatZAR(item.lineTotal)}
-                      </ThemedText>
+                    <View className="flex-row items-center justify-between">
+                      <Text variant="caption" className="font-semibold">
+                        Qty: {item.quantity}
+                      </Text>
+                      <Text variant="label">{formatZAR(item.lineTotal)}</Text>
                     </View>
                   </View>
                 </View>
@@ -281,260 +305,45 @@ export default function OrderSuccessScreen() {
           </View>
 
           {/* What's Next */}
-          <View style={styles.nextSteps}>
-            <ThemedText style={styles.nextStepsTitle}>What&apos;s Next?</ThemedText>
-            <View style={styles.stepItem}>
-              <IconSymbol name="checkmark.seal" size={20} color="#666" />
-              <ThemedText style={styles.stepText}>Your payment is confirmed</ThemedText>
+          <View className="mb-10 w-full">
+            <Text variant="heading" className="mb-4 text-center">
+              What&apos;s Next?
+            </Text>
+            <View className="mb-3 flex-row items-center gap-3">
+              <IconSymbol name="checkmark.seal" size={20} color={colors.mutedForeground} />
+              <Text variant="body" className="flex-1 text-muted-foreground">
+                Your payment is confirmed
+              </Text>
             </View>
-            <View style={styles.stepItem}>
-              <IconSymbol name="hammer" size={20} color="#666" />
-              <ThemedText style={styles.stepText}>The brand is preparing your order</ThemedText>
+            <View className="mb-3 flex-row items-center gap-3">
+              <IconSymbol name="hammer" size={20} color={colors.mutedForeground} />
+              <Text variant="body" className="flex-1 text-muted-foreground">
+                The brand is preparing your order
+              </Text>
             </View>
-            <View style={styles.stepItem}>
-              <IconSymbol name="shippingbox" size={20} color="#666" />
-              <ThemedText style={styles.stepText}>We&apos;ll notify you when it ships</ThemedText>
+            <View className="mb-3 flex-row items-center gap-3">
+              <IconSymbol name="shippingbox" size={20} color={colors.mutedForeground} />
+              <Text variant="body" className="flex-1 text-muted-foreground">
+                We&apos;ll notify you when it ships
+              </Text>
             </View>
           </View>
 
           {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.trackOrderButton} onPress={handleTrackOrder}>
-              <IconSymbol name="location" size={20} color="#007AFF" />
-              <ThemedText style={styles.trackOrderButtonText}>Track Your Order</ThemedText>
-            </TouchableOpacity>
+          <View className="w-full gap-4">
+            <Button variant="brand" className="w-full" onPress={handleTrackOrder}>
+              <IconSymbol name="location" size={20} color={colors.brandForeground} />
+              <Text variant="label" className="text-brand-foreground">
+                Track Your Order
+              </Text>
+            </Button>
 
-            <TouchableOpacity style={styles.continueShoppingButton} onPress={handleContinueShopping}>
-              <ThemedText style={styles.continueShoppingButtonText}>Continue Shopping</ThemedText>
-            </TouchableOpacity>
+            <Button variant="outline" className="w-full" onPress={handleContinueShopping}>
+              Continue Shopping
+            </Button>
           </View>
         </View>
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  stateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-  },
-  stateText: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  orderNumberHint: {
-    fontSize: 13,
-    color: '#999',
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  dangerButton: {
-    borderWidth: 1,
-    borderColor: '#b3261e',
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  dangerButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#b3261e',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingBottom: 40,
-  },
-  successIcon: {
-    marginBottom: 32,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  successSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 40,
-  },
-  orderDetails: {
-    width: '100%',
-    backgroundColor: '#f8f8f8',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 32,
-  },
-  orderDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  orderDetailLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  orderDetailValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  orderItems: {
-    width: '100%',
-    marginBottom: 32,
-  },
-  orderItemsTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  orderItemCard: {
-    flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    gap: 12,
-  },
-  orderItemImage: {
-    width: 60,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#e0e0e0',
-  },
-  orderItemImagePlaceholder: {
-    width: 60,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#e0e0e0',
-  },
-  orderItemDetails: {
-    flex: 1,
-  },
-  orderItemName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  orderItemMerchant: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
-    marginBottom: 4,
-  },
-  orderItemSize: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-  },
-  orderItemPriceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  orderItemQuantity: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  orderItemPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  nextSteps: {
-    width: '100%',
-    marginBottom: 40,
-  },
-  nextStepsTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  stepItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  stepText: {
-    fontSize: 16,
-    color: '#666',
-    flex: 1,
-  },
-  actionButtons: {
-    width: '100%',
-    gap: 16,
-  },
-  trackOrderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#f0f8ff',
-    paddingVertical: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  trackOrderButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  continueShoppingButton: {
-    backgroundColor: '#000',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  continueShoppingButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-});

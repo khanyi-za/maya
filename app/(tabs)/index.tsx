@@ -2,16 +2,19 @@ import { CategoryFilter } from '@/components/CategoryFilter';
 import { FeedTabs } from '@/components/FeedTabs';
 import { ProductCard } from '@/components/ProductCard';
 import { RowProductList } from '@/components/RowProductList';
-import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
 import { YiivaHeader } from '@/components/YiivaHeader';
 import { SideMenu } from '@/components/SideMenu';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Text } from '@/components/ui/text';
 import { useFilter } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
 import { resolveBookmarked, resolveFollowed, useServerSocial } from '@/lib/server-social';
 import { useRequireAuth, useToggleBookmark, useToggleFollow } from '@/hooks/useSocialMutations';
 import { imageSource } from '@/lib/image-source';
 import { formatZAR } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { useThemeColors } from '@/lib/theme';
 import {
   useCategories,
   useNewArrivals,
@@ -26,17 +29,29 @@ import {
   NativeSyntheticEvent,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   View,
-  StatusBar,
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useUnreadNotificationCount } from '@/hooks/useNotificationQueries';
 
+function FeedSkeleton() {
+  return (
+    <View className="pt-5">
+      {[0, 1, 2].map((r) => (
+        <View key={r} className="mb-3 flex-row gap-3 px-3">
+          <Skeleton className="h-80 flex-1 rounded-lg" />
+          <Skeleton className="h-80 flex-1 rounded-lg" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const colors = useThemeColors();
   const unreadNotifications = useUnreadNotificationCount();
   const { activePrimaryFilter } = useFilter();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -49,35 +64,23 @@ export default function HomeScreen() {
   const toggleFollow = useToggleFollow();
   const requireAuth = useRequireAuth();
 
-  // 'home-lifestyle' has no backend taxonomy yet (open-questions §P-4) —
-  // queries stay disabled and the tab renders a placeholder.
   const gender: GenderType | null =
     activePrimaryFilter === 'home-lifestyle' ? null : activePrimaryFilter;
 
-  const feedQuery = useProductFeed(
-    gender,
-    activeCategory === 'All' ? undefined : activeCategory
-  );
+  const feedQuery = useProductFeed(gender, activeCategory === 'All' ? undefined : activeCategory);
   const newArrivalsQuery = useNewArrivals(gender);
   const trendingQuery = useTrendingMerchants(gender);
   const categoriesQuery = useCategories(gender);
 
-  const products: Product[] =
-    feedQuery.data?.pages.flatMap((page) => page.products) ?? [];
+  const products: Product[] = feedQuery.data?.pages.flatMap((page) => page.products) ?? [];
 
   const handleMenuPress = () => setIsMenuVisible(true);
   const handleCartPress = () => router.push('/cart');
   const handleNotificationsPress = () => router.push('/notifications');
-  const handleCategoryChange = useCallback(
-    (category: string) => setActiveCategory(category),
-    []
-  );
+  const handleCategoryChange = useCallback((category: string) => setActiveCategory(category), []);
   const handleBookmark = (product: Product) => {
     if (!requireAuth()) return;
-    toggleBookmark(
-      product.id,
-      resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)
-    );
+    toggleBookmark(product.id, resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe));
   };
   const handleLike = (productId: string) => toggleLike(productId);
   const handleSeeAll = (_title: string) => router.push('/explore');
@@ -92,8 +95,7 @@ export default function HomeScreen() {
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const nearBottom =
-      contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
+    const nearBottom = contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
     if (nearBottom && feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
       feedQuery.fetchNextPage();
     }
@@ -103,9 +105,9 @@ export default function HomeScreen() {
   const newArrivals = newArrivalsQuery.data?.products ?? [];
 
   const renderGridRow = (rowProducts: Product[], key: string) => (
-    <View key={key} style={styles.gridRow}>
+    <View key={key} className="mb-3 flex-row gap-3 px-3">
       {rowProducts.map((product) => (
-        <View key={product.id} style={styles.gridItem}>
+        <View key={product.id} className="flex-1">
           <ProductCard
             productImage={imageSource(product.primaryImage)}
             profileImage={imageSource(product.merchant.logo)}
@@ -126,64 +128,41 @@ export default function HomeScreen() {
   );
 
   const renderTrendingBrands = () => (
-    <View key="trending-brands" style={styles.brandsSection}>
-      <View style={styles.brandsSectionHeader}>
-        <ThemedText style={styles.brandsSectionTitle}>Trending Brands</ThemedText>
+    <View key="trending-brands" className="my-5">
+      <View className="mb-4 flex-row items-center justify-between px-5">
+        <Text variant="title">Trending Brands</Text>
         <TouchableOpacity onPress={() => router.push('/explore')}>
-          <ThemedText style={styles.seeAllText}>See All</ThemedText>
+          <Text className="text-[14px] font-medium text-brand">See All</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.brandsContainer}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}>
         {trendingBrands.map((brand) => {
-          const isFollowingBrand = resolveFollowed(
-            followed,
-            brand.id,
-            brand.isFollowedByMe
-          );
+          const isFollowingBrand = resolveFollowed(followed, brand.id, brand.isFollowedByMe);
           return (
-          <TouchableOpacity
-            key={brand.id}
-            style={styles.brandCard}
-            onPress={() => handleBrandPress(brand.username)}
-            activeOpacity={0.9}
-          >
-            {brand.logo ? (
-              <Image source={imageSource(brand.logo)} style={styles.brandLogo} />
-            ) : (
-              <View style={[styles.brandLogo, styles.brandPlaceholder]}>
-                <ThemedText style={styles.brandInitial}>
-                  {brand.displayName.charAt(0).toUpperCase()}
-                </ThemedText>
-              </View>
-            )}
-            <ThemedText style={styles.brandName} numberOfLines={1}>
-              {brand.displayName}
-            </ThemedText>
-            <TouchableOpacity
-              style={[
-                styles.followButton,
-                isFollowingBrand && styles.followingButton,
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                if (!requireAuth()) return;
-                toggleFollow(brand.id, isFollowingBrand);
-              }}
-            >
-              <ThemedText
-                style={[
-                  styles.followButtonText,
-                  isFollowingBrand && styles.followingButtonText,
-                ]}
+            <TouchableOpacity key={brand.id} className="w-[120px] items-center" onPress={() => handleBrandPress(brand.username)} activeOpacity={0.9}>
+              {brand.logo ? (
+                <Image source={imageSource(brand.logo)} style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 8, backgroundColor: colors.muted }} contentFit="cover" />
+              ) : (
+                <View className="mb-2 h-20 w-20 items-center justify-center rounded-full bg-muted">
+                  <Text className="text-[28px] font-bold text-muted-foreground">{brand.displayName.charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
+              <Text variant="label" numberOfLines={1} className="mb-3 text-center text-[14px]">
+                {brand.displayName}
+              </Text>
+              <TouchableOpacity
+                className={cn('min-w-[80px] rounded-full px-5 py-1.5', isFollowingBrand ? 'border border-border bg-card' : 'bg-brand')}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  if (!requireAuth()) return;
+                  toggleFollow(brand.id, isFollowingBrand);
+                }}
               >
-                {isFollowingBrand ? 'Following' : 'Follow'}
-              </ThemedText>
+                <Text className={cn('text-center text-[12px] font-semibold', isFollowingBrand ? 'text-foreground' : 'text-brand-foreground')}>
+                  {isFollowingBrand ? 'Following' : 'Follow'}
+                </Text>
+              </TouchableOpacity>
             </TouchableOpacity>
-          </TouchableOpacity>
           );
         })}
       </ScrollView>
@@ -205,8 +184,6 @@ export default function HomeScreen() {
     />
   );
 
-  // Grid rows of 2, with the New Arrivals carousel after row 3 and Trending
-  // Brands after row 6 (or at the end of a shorter feed).
   const renderFeed = () => {
     const content: React.ReactNode[] = [];
     const rows: Product[][] = [];
@@ -224,7 +201,6 @@ export default function HomeScreen() {
       }
     });
 
-    // Shorter feeds still get the carousels, appended after the grid.
     if (rows.length <= 2 && newArrivals.length > 0) {
       content.push(renderNewArrivals());
     }
@@ -238,65 +214,54 @@ export default function HomeScreen() {
   const renderBody = () => {
     if (gender === null) {
       return (
-        <View style={styles.placeholderContainer}>
-          <ThemedText style={styles.placeholderTitle}>Coming soon</ThemedText>
-          <ThemedText style={styles.placeholderText}>
+        <View className="items-center gap-3 px-10 py-20">
+          <Text variant="heading">Coming soon</Text>
+          <Text variant="body" className="text-center text-muted-foreground">
             Home & Lifestyle is on its way. Check back shortly.
-          </ThemedText>
+          </Text>
         </View>
       );
     }
 
     if (feedQuery.isPending) {
-      return (
-        <View style={styles.placeholderContainer}>
-          <ActivityIndicator size="large" color="#333" />
-        </View>
-      );
+      return <FeedSkeleton />;
     }
 
     if (feedQuery.isError) {
       return (
-        <View style={styles.placeholderContainer}>
-          <ThemedText style={styles.placeholderTitle}>
-            Couldn&apos;t load the feed
-          </ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={() => feedQuery.refetch()}>
-            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
-          </TouchableOpacity>
+        <View className="items-center gap-3 px-10 py-20">
+          <Text variant="heading">Couldn&apos;t load the feed</Text>
+          <Button variant="brand" className="mt-2 px-8" onPress={() => feedQuery.refetch()}>
+            Retry
+          </Button>
         </View>
       );
     }
 
     if (products.length === 0) {
       return (
-        <View style={styles.placeholderContainer}>
-          <ThemedText style={styles.placeholderTitle}>Nothing here yet</ThemedText>
-          <ThemedText style={styles.placeholderText}>
+        <View className="items-center gap-3 px-10 py-20">
+          <Text variant="heading">Nothing here yet</Text>
+          <Text variant="body" className="text-center text-muted-foreground">
             No products match this view. Try another tab or category.
-          </ThemedText>
+          </Text>
         </View>
       );
     }
 
     return (
-      <ThemedView style={styles.feed}>
+      <View className="pb-24 pt-5">
         {renderFeed()}
         {feedQuery.isFetchingNextPage && (
-          <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+          <ActivityIndicator size="small" color={colors.mutedForeground} style={{ marginVertical: 16 }} />
         )}
-      </ThemedView>
+      </View>
     );
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <SideMenu
-        visible={isMenuVisible}
-        onClose={() => setIsMenuVisible(false)}
-        userName="Khanyisomthamo2"
-      />
+    <View className="flex-1 bg-background">
+      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} userName="Khanyisomthamo2" />
       <YiivaHeader
         onMenuPress={handleMenuPress}
         onCartPress={handleCartPress}
@@ -307,7 +272,7 @@ export default function HomeScreen() {
       <FeedTabs />
 
       <ScrollView
-        style={styles.scrollView}
+        className="flex-1 bg-background"
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -315,6 +280,7 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={gender !== null && feedQuery.isRefetching}
             onRefresh={handleRefresh}
+            tintColor={colors.mutedForeground}
           />
         }
       >
@@ -327,134 +293,6 @@ export default function HomeScreen() {
         )}
         {renderBody()}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  feed: {
-    paddingTop: 20,
-    paddingBottom: 100,
-  },
-  placeholderContainer: {
-    paddingVertical: 80,
-    paddingHorizontal: 40,
-    alignItems: 'center',
-    gap: 12,
-  },
-  placeholderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  placeholderText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  retryButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 8,
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  pagingSpinner: {
-    marginVertical: 16,
-  },
-  gridRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    gap: 12,
-    marginBottom: 12,
-  },
-  gridItem: {
-    flex: 1,
-  },
-  brandsSection: {
-    marginVertical: 20,
-  },
-  brandsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  brandsSectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  brandsContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  brandCard: {
-    width: 120,
-    alignItems: 'center',
-  },
-  brandLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  brandPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ddd',
-  },
-  brandInitial: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#666',
-  },
-  brandName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  followButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 80,
-  },
-  followingButton: {
-    backgroundColor: '#f0f0f0',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  followButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  followingButtonText: {
-    color: '#666',
-  },
-});

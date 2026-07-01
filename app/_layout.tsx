@@ -1,3 +1,4 @@
+import '../global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -78,7 +79,7 @@ export default function RootLayout() {
             <Stack.Screen name="product/[productId]" options={{ headerShown: false }} />
             <Stack.Screen name="+not-found" />
           </Stack>
-          <StatusBar style="dark" backgroundColor="#fff" />
+          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
         </ThemeProvider>
       </FilterProvider>
     </QueryClientProvider>

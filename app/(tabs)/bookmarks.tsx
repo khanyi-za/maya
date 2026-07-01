@@ -1,14 +1,16 @@
 import { MasonryGrid } from '@/components/MasonryGrid';
 import { ProductCard } from '@/components/ProductCard';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Text } from '@/components/ui/text';
 import { useBookmarks } from '@/hooks/useBookmarkQueries';
 import { useToggleBookmark } from '@/hooks/useSocialMutations';
 import { useAuthStore } from '@/lib/auth-store';
 import { useSocialStore } from '@/lib/social-store';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
+import { useThemeColors } from '@/lib/theme';
 import type { Bookmark } from '@/lib/api-client';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -18,10 +20,8 @@ import {
   NativeSyntheticEvent,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   View,
-  StatusBar,
 } from 'react-native';
 
 function savedAgo(iso: string): string {
@@ -38,6 +38,7 @@ function savedAgo(iso: string): string {
 
 export default function BookmarksScreen() {
   const router = useRouter();
+  const colors = useThemeColors();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const authStatus = useAuthStore((s) => s.state.status);
   const { toggleLike, isLiked } = useSocialStore();
@@ -52,10 +53,6 @@ export default function BookmarksScreen() {
 
   const handleBookmarkRemove = (productId: string) => {
     toggleBookmark(productId, true);
-  };
-
-  const toggleViewMode = () => {
-    setViewMode(viewMode === 'list' ? 'grid' : 'list');
   };
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -73,14 +70,18 @@ export default function BookmarksScreen() {
     text: string,
     action?: { label: string; onPress: () => void }
   ) => (
-    <View style={styles.emptyState}>
-      <IconSymbol name={icon as any} size={64} color="#ccc" />
-      <ThemedText style={styles.emptyTitle}>{title}</ThemedText>
-      <ThemedText style={styles.emptyText}>{text}</ThemedText>
+    <View className="flex-1 items-center justify-center px-10 pt-24">
+      <IconSymbol name={icon as any} size={64} color={colors.mutedForeground} />
+      <Text variant="title" className="mb-2 mt-4 text-center">
+        {title}
+      </Text>
+      <Text variant="body" className="text-center text-muted-foreground">
+        {text}
+      </Text>
       {action && (
-        <TouchableOpacity style={styles.emptyButton} onPress={action.onPress}>
-          <ThemedText style={styles.emptyButtonText}>{action.label}</ThemedText>
-        </TouchableOpacity>
+        <Button variant="brand" className="mt-6 px-10" onPress={action.onPress}>
+          {action.label}
+        </Button>
       )}
     </View>
   );
@@ -97,8 +98,10 @@ export default function BookmarksScreen() {
 
     if (bookmarksQuery.isPending || authStatus === 'loading') {
       return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#333" />
+        <View className="flex-row flex-wrap gap-3 px-5 pt-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-56 flex-1 basis-[45%] rounded-xl" />
+          ))}
         </View>
       );
     }
@@ -116,19 +119,20 @@ export default function BookmarksScreen() {
       return renderCenteredState(
         'bookmark',
         'No bookmarks yet',
-        'Save products you love by tapping the bookmark icon'
+        'Save products you love by tapping the bookmark icon',
+        { label: 'Start exploring', onPress: () => router.replace('/(tabs)') }
       );
     }
 
     return (
-      <View style={styles.content}>
+      <View className="flex-1">
         {viewMode === 'list' ? (
           // List view with ProductCards
-          <View style={styles.listView}>
+          <View className="px-5 pt-4">
             {bookmarks.map((bookmark) => {
               const { product } = bookmark;
               return (
-                <View key={product.id} style={styles.bookmarkItem}>
+                <View key={product.id} className="mb-4">
                   <ProductCard
                     productImage={imageSource(product.primaryImage)}
                     profileImage={imageSource(product.merchant.logo)}
@@ -142,14 +146,12 @@ export default function BookmarksScreen() {
                     isLiked={isLiked(product.id)}
                     isBookmarked={true}
                   />
-                  <View style={styles.bookmarkMeta}>
-                    <ThemedText style={styles.bookmarkTime}>
-                      Saved {savedAgo(bookmark.bookmarkedAt)}
-                    </ThemedText>
+                  <View className="mt-2 flex-row items-center gap-3 pl-1">
+                    <Text variant="caption">Saved {savedAgo(bookmark.bookmarkedAt)}</Text>
                     {!product.available && (
-                      <ThemedText style={styles.unavailableText}>
+                      <Text variant="caption" className="font-semibold text-danger">
                         No longer available
-                      </ThemedText>
+                      </Text>
                     )}
                   </View>
                 </View>
@@ -158,7 +160,7 @@ export default function BookmarksScreen() {
           </View>
         ) : (
           // Grid view with MasonryGrid
-          <View style={styles.gridView}>
+          <View className="px-5 pt-4">
             <MasonryGrid
               data={bookmarks.map((bookmark) => ({
                 id: bookmark.product.id,
@@ -175,145 +177,62 @@ export default function BookmarksScreen() {
           </View>
         )}
         {bookmarksQuery.isFetchingNextPage && (
-          <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+          <ActivityIndicator
+            size="small"
+            color={colors.mutedForeground}
+            style={{ marginVertical: 16 }}
+          />
         )}
       </View>
     );
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
+    <View className="flex-1 bg-background">
       {/* Header */}
-      <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>Wishlist</ThemedText>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={toggleViewMode} style={styles.viewToggle}>
-            <IconSymbol
-              name={viewMode === 'list' ? 'square.grid.2x2' : 'list.bullet'}
-              size={20}
-              color="#666"
-            />
-          </TouchableOpacity>
+      <View className="flex-row items-center justify-between border-b border-border px-5 pb-4 pt-16">
+        <Text variant="title">Wishlist</Text>
+
+        {/* Segmented list/grid toggle */}
+        <View className="flex-row rounded-lg bg-muted p-1">
+          {(['list', 'grid'] as const).map((mode) => {
+            const active = viewMode === mode;
+            return (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => setViewMode(mode)}
+                activeOpacity={0.7}
+                className={`h-8 w-9 items-center justify-center rounded-md ${
+                  active ? 'bg-card' : ''
+                }`}
+              >
+                <IconSymbol
+                  name={mode === 'list' ? 'list.bullet' : 'square.grid.2x2'}
+                  size={18}
+                  color={active ? colors.foreground : colors.mutedForeground}
+                />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
       <ScrollView
-        style={styles.scrollView}
+        className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ flexGrow: 1 }}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={bookmarksQuery.isRefetching}
             onRefresh={() => bookmarksQuery.refetch()}
+            tintColor={colors.mutedForeground}
           />
         }
       >
         {renderBody()}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#000',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewToggle: {
-    padding: 8,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-  },
-  listView: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  gridView: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  bookmarkItem: {
-    marginBottom: 16,
-  },
-  bookmarkMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingLeft: 4,
-    marginTop: 8,
-  },
-  bookmarkTime: {
-    fontSize: 12,
-    color: '#999',
-  },
-  unavailableText: {
-    fontSize: 12,
-    color: '#b3261e',
-    fontWeight: '600',
-  },
-  pagingSpinner: {
-    marginVertical: 16,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingTop: 100,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  emptyButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-});

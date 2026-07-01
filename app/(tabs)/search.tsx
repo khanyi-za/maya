@@ -1,20 +1,22 @@
 import { CategoryFilter } from '@/components/CategoryFilter';
+import { ReelsGrid } from '@/components/ReelsGrid';
 import { ProductCard } from '@/components/ProductCard';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { SideMenu } from '@/components/SideMenu';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Text } from '@/components/ui/text';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useThemeColors } from '@/lib/theme';
+import { cn } from '@/lib/utils';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
-  StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
-  StatusBar,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +41,7 @@ const MAX_RECENT = 5;
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { activePrimaryFilter } = useFilter();
   const [searchQuery, setSearchQuery] = useState('');
   // Set on submit / recent / trending tap to bypass the 250ms debounce.
@@ -137,12 +140,6 @@ export default function SearchScreen() {
     }
   };
 
-  const handleBackToGrid = () => {
-    setIsSearchFocused(false);
-    setSearchQuery('');
-    setInstantQuery(null);
-  };
-
   const handleResultsScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     const nearBottom =
@@ -167,9 +164,9 @@ export default function SearchScreen() {
     }
 
     return rows.map((rowProducts, rowIndex) => (
-      <View key={`row-${rowIndex}`} style={styles.gridRow}>
+      <View key={`row-${rowIndex}`} className="mb-3 flex-row gap-3 px-3">
         {rowProducts.map((product, colIndex) => (
-          <View key={product.id} style={styles.gridItem}>
+          <View key={product.id} className="flex-1">
             <ProductCard
               productImage={imageSource(product.primaryImage)}
               profileImage={imageSource(product.merchant.logo)}
@@ -200,29 +197,35 @@ export default function SearchScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <View className="flex-1 bg-background">
       <SideMenu
         visible={isMenuVisible}
         onClose={() => setIsMenuVisible(false)}
         userName="Khanyisomthamo2"
       />
       {/* Search Header */}
-      <View style={[styles.searchHeader, { paddingTop: insets.top + 16 }]}>
-        <TouchableOpacity onPress={() => setIsMenuVisible(true)} style={styles.menuButton}>
-          <View style={styles.menuIcon}>
-            <View style={styles.menuLine} />
-            <View style={styles.menuLine} />
-            <View style={styles.menuLine} />
+      <View
+        className="flex-row items-center gap-3 border-b border-border bg-background px-5 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
+        <TouchableOpacity onPress={() => setIsMenuVisible(true)} className="p-2">
+          <View className="gap-[3px]">
+            <View className="h-0.5 w-5 rounded-sm bg-foreground" />
+            <View className="h-0.5 w-5 rounded-sm bg-foreground" />
+            <View className="h-0.5 w-5 rounded-sm bg-foreground" />
           </View>
         </TouchableOpacity>
 
-        <View style={styles.searchInputContainer}>
-          <IconSymbol name="magnifyingglass" size={20} color="#666" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
+        <View className="h-11 flex-1 flex-row items-center rounded-xl bg-muted px-3">
+          <IconSymbol
+            name="magnifyingglass"
+            size={20}
+            color={colors.mutedForeground}
+            style={{ marginRight: 8 }}
+          />
+          <Input
+            className="h-full flex-1 border-0 bg-transparent px-0 text-base"
             placeholder="Search artists, products, locations..."
-            placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={handleTextChange}
             onSubmitEditing={() => handleSubmit(searchQuery)}
@@ -234,321 +237,150 @@ export default function SearchScreen() {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => handleTextChange('')} style={styles.clearButton}>
-              <IconSymbol name="xmark.circle.fill" size={20} color="#999" />
+            <TouchableOpacity onPress={() => handleTextChange('')} className="ml-2">
+              <IconSymbol name="xmark.circle.fill" size={20} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Category Filter */}
-      {!isSearchFocused && !isSearching && (
-        <CategoryFilter onCategoryChange={handleCategoryChange} searchMode={true} />
-      )}
-
-      {isSearchFocused && !isSearching && (
+      {/* Browse view (not actively searching): categories ↔ trending on top,
+          reels grid always below. */}
+      {!isSearching && (
         <ScrollView
-          style={styles.scrollView}
+          className="flex-1"
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.content}>
-            {recentSearches.length > 0 && (
-              <View style={styles.section}>
-                <ThemedText style={styles.sectionTitle}>Recent Searches</ThemedText>
-                {recentSearches.map((search, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.recentSearchItem}
-                    onPress={() => handleSubmit(search)}
-                  >
-                    <IconSymbol name="clock" size={16} color="#666" />
-                    <ThemedText style={styles.recentSearchText}>{search}</ThemedText>
+          {!isSearchFocused ? (
+            <CategoryFilter onCategoryChange={handleCategoryChange} searchMode={true} />
+          ) : (
+            <View className="px-5 pt-4">
+              {recentSearches.length > 0 && (
+                <View className="mb-8">
+                  <Text variant="heading" className="mb-4">
+                    Recent Searches
+                  </Text>
+                  {recentSearches.map((search, index) => (
                     <TouchableOpacity
-                      onPress={() => clearRecentSearch(index)}
-                      style={styles.clearRecentButton}
+                      key={index}
+                      className="flex-row items-center border-b border-border px-1 py-3"
+                      onPress={() => handleSubmit(search)}
                     >
-                      <IconSymbol name="xmark" size={14} color="#999" />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {trendingTags.length > 0 && (
-              <View style={styles.section}>
-                <ThemedText style={styles.sectionTitle}>Trending</ThemedText>
-                <View style={styles.trendingTags}>
-                  {trendingTags.map((tag) => (
-                    <TouchableOpacity
-                      key={tag}
-                      style={styles.trendingTag}
-                      onPress={() => handleSubmit(tag.replace(/^#/, ''))}
-                    >
-                      <ThemedText style={styles.trendingTagText}>{tag}</ThemedText>
+                      <IconSymbol name="clock" size={16} color={colors.mutedForeground} />
+                      <Text variant="body" className="ml-3 flex-1 text-base">
+                        {search}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => clearRecentSearch(index)}
+                        className="p-1"
+                      >
+                        <IconSymbol name="xmark" size={14} color={colors.mutedForeground} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
                 </View>
-              </View>
-            )}
-          </View>
+              )}
 
-          <TouchableOpacity
-            style={styles.backToGridArea}
-            onPress={handleBackToGrid}
-            activeOpacity={1}
-          />
+              {trendingTags.length > 0 && (
+                <View className="mb-8">
+                  <Text variant="heading" className="mb-4">
+                    Trending
+                  </Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    {trendingTags.map((tag) => (
+                      <TouchableOpacity
+                        key={tag}
+                        className="rounded-2xl bg-muted px-3 py-1.5"
+                        onPress={() => handleSubmit(tag.replace(/^#/, ''))}
+                      >
+                        <Text variant="caption" className="text-sm">
+                          {tag}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Reels stay below across both focus states. */}
+          <ReelsGrid />
         </ScrollView>
       )}
 
       {isSearching && (
         <ScrollView
-          style={styles.scrollView}
+          className="flex-1"
           showsVerticalScrollIndicator={false}
           onScroll={handleResultsScroll}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.resultsContainer}>
+          <View className="pt-4">
             {resultsQuery.isPending ? (
-              <View style={styles.noResults}>
-                <ActivityIndicator size="large" color="#333" />
+              <View className="px-3">
+                {[0, 1, 2].map((r) => (
+                  <View key={r} className="mb-3 flex-row gap-3">
+                    <Skeleton className="h-72 flex-1 rounded-xl" />
+                    <Skeleton className="h-72 flex-1 rounded-xl" />
+                  </View>
+                ))}
               </View>
             ) : resultsQuery.isError ? (
-              <View style={styles.noResults}>
-                <ThemedText style={styles.noResultsTitle}>Search failed</ThemedText>
-                <ThemedText style={styles.noResultsText}>
+              <View className="items-center px-10 pt-[60px]">
+                <IconSymbol name="exclamationmark.triangle" size={48} color={colors.mutedForeground} />
+                <Text variant="heading" className="mb-2 mt-4">
+                  Search failed
+                </Text>
+                <Text variant="caption" className="text-center">
                   Couldn&apos;t reach YIIVA. Check your connection and try again.
-                </ThemedText>
-                <TouchableOpacity
-                  style={styles.retryButton}
+                </Text>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="mt-4"
                   onPress={() => resultsQuery.refetch()}
                 >
-                  <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
-                </TouchableOpacity>
+                  Retry
+                </Button>
               </View>
             ) : searchResults.length > 0 ? (
               <>
-                <ThemedText style={styles.resultsHeader}>
+                <Text variant="body" className="mb-5 px-5 font-medium text-muted-foreground">
                   {searchResults.length}
                   {resultsQuery.hasNextPage ? '+' : ''} result
                   {searchResults.length !== 1 || resultsQuery.hasNextPage ? 's' : ''} for &quot;
                   {effectiveQuery}&quot;
-                </ThemedText>
+                </Text>
                 <View
-                  style={[styles.results, resultsQuery.isPlaceholderData && styles.resultsStale]}
+                  className={cn('pb-[100px]', resultsQuery.isPlaceholderData && 'opacity-50')}
                 >
                   {renderResultsGrid()}
                   {resultsQuery.isFetchingNextPage && (
-                    <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.mutedForeground}
+                      style={{ marginVertical: 16 }}
+                    />
                   )}
                 </View>
               </>
             ) : (
-              <View style={styles.noResults}>
-                <IconSymbol name="magnifyingglass" size={48} color="#ccc" />
-                <ThemedText style={styles.noResultsTitle}>No results found</ThemedText>
-                <ThemedText style={styles.noResultsText}>
+              <View className="items-center px-10 pt-[60px]">
+                <IconSymbol name="magnifyingglass" size={48} color={colors.mutedForeground} />
+                <Text variant="heading" className="mb-2 mt-4">
+                  No results found
+                </Text>
+                <Text variant="caption" className="text-center">
                   Try adjusting your search or browse by category
-                </ThemedText>
+                </Text>
               </View>
             )}
           </View>
         </ScrollView>
       )}
-
-      {!isSearchFocused && !isSearching && (
-        <View style={styles.placeholderContainer}>
-          <IconSymbol name="magnifyingglass" size={64} color="#ccc" />
-          <ThemedText style={styles.placeholderTitle}>Search for products</ThemedText>
-          <ThemedText style={styles.placeholderText}>
-            Search by product name, category, or brand name
-          </ThemedText>
-        </View>
-      )}
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  searchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    gap: 12,
-  },
-  menuButton: {
-    padding: 8,
-  },
-  menuIcon: {
-    gap: 3,
-  },
-  menuLine: {
-    width: 20,
-    height: 2,
-    backgroundColor: '#333',
-    borderRadius: 1,
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-    height: '100%',
-  },
-  clearButton: {
-    marginLeft: 8,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-  },
-  recentSearchItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  recentSearchText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 12,
-  },
-  clearRecentButton: {
-    padding: 4,
-  },
-  trendingTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  trendingTag: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  trendingTagText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  resultsContainer: {
-    paddingTop: 16,
-  },
-  resultsHeader: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666',
-    marginBottom: 20,
-    paddingHorizontal: 20,
-  },
-  results: {
-    paddingBottom: 100,
-  },
-  resultsStale: {
-    opacity: 0.5,
-  },
-  pagingSpinner: {
-    marginVertical: 16,
-  },
-  gridRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    gap: 12,
-    marginBottom: 12,
-  },
-  gridItem: {
-    flex: 1,
-  },
-  noResults: {
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 40,
-  },
-  noResultsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  noResultsText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  retryButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 16,
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  backToGridArea: {
-    flex: 1,
-    minHeight: 200,
-    backgroundColor: 'transparent',
-  },
-  placeholderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingTop: 100,
-  },
-  placeholderTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 24,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  placeholderText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-});

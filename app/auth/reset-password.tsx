@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Text } from '@/components/ui/text';
 import { resetPassword } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
 
@@ -61,124 +61,57 @@ export default function ResetPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      className="flex-1 bg-background"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.content, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.title}>Choose a new password</Text>
-        <Text style={styles.body}>
+      <View className="flex-1 px-6" style={{ paddingTop: insets.top + 24 }}>
+        <Text variant="display" className="mb-3">Choose a new password</Text>
+        <Text variant="body" className="mb-6 text-muted-foreground">
           At least 8 characters, with an uppercase letter, a lowercase letter
           and a number.
         </Text>
 
         {error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{error}</Text>
+          <View className="mb-4 rounded-[10px] bg-danger-subtle p-3.5">
+            <Text className="text-[14px] leading-[19px] text-danger">{error}</Text>
           </View>
         )}
 
-        <TextInput
-          style={styles.input}
+        <Input
+          className="mb-3"
           placeholder="New password"
-          placeholderTextColor="#999"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           textContentType="newPassword"
+          error={!!error}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          className="mb-3"
           placeholder="Confirm new password"
-          placeholderTextColor="#999"
           value={confirm}
           onChangeText={setConfirm}
           secureTextEntry
           textContentType="newPassword"
           onSubmitEditing={handleSubmit}
           returnKeyType="go"
+          error={!!error}
         />
 
-        <TouchableOpacity
-          style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
+        <Button
+          variant="brand"
+          className="mt-2 mb-4"
+          loading={submitting}
           onPress={handleSubmit}
-          disabled={submitting}
         >
-          <Text style={styles.primaryButtonText}>
-            {submitting ? 'Updating…' : 'Update Password'}
-          </Text>
-        </TouchableOpacity>
+          {submitting ? 'Updating…' : 'Update Password'}
+        </Button>
 
         <TouchableOpacity onPress={() => router.replace('/auth/forgot-password')}>
-          <Text style={styles.linkText}>Request a new link</Text>
+          <Text className="text-center text-brand font-medium">Request a new link</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 12,
-  },
-  body: {
-    fontSize: 15,
-    color: '#555',
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  errorBanner: {
-    backgroundColor: '#fdecec',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 16,
-  },
-  errorBannerText: {
-    color: '#b3261e',
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  input: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#000',
-    marginBottom: 12,
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  primaryButtonDisabled: {
-    backgroundColor: '#999',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#666',
-    textDecorationLine: 'underline',
-    textAlign: 'center',
-  },
-});

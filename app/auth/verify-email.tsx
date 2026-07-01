@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text } from '@/components/ui/text';
+import { Button } from '@/components/ui/button';
+import { useThemeColors } from '@/lib/theme';
 import { verifyEmail } from '@/lib/auth';
 
 // Universal-link target: https://yiiva.co.za/auth/verify-email?token=...
 // (docs/auth-mobile-guide.md §5.3). Auto-logs the user in on success.
 export default function VerifyEmailScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { token } = useLocalSearchParams<{ token?: string }>();
   const [state, setState] = useState<'verifying' | 'error'>('verifying');
 
@@ -28,70 +26,40 @@ export default function VerifyEmailScreen() {
   }, [token]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 24 }]}>
+    <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 24 }}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.content}>
+      <View className="flex-1 items-center justify-center gap-4 px-8 pb-20">
         {state === 'verifying' ? (
           <>
-            <ActivityIndicator size="large" color="#333" />
-            <Text style={styles.title}>Verifying your email…</Text>
+            <ActivityIndicator size="large" color={colors.brand} />
+            <Text variant="title" className="text-center">
+              Verifying your email…
+            </Text>
           </>
         ) : (
           <>
-            <Text style={styles.title}>This link didn&apos;t work</Text>
-            <Text style={styles.body}>
+            <View className="h-20 w-20 items-center justify-center rounded-full bg-danger-subtle">
+              <Text className="text-danger" style={{ fontSize: 36, fontWeight: '700' }}>
+                !
+              </Text>
+            </View>
+            <Text variant="title" className="text-center">
+              This link didn&apos;t work
+            </Text>
+            <Text variant="body" className="text-center text-muted-foreground">
               The verification link is invalid or has expired. Links are valid
               for 24 hours — try registering again to get a fresh one.
             </Text>
-            <TouchableOpacity
-              style={styles.primaryButton}
+            <Button
+              variant="brand"
+              className="mt-2 px-12"
               onPress={() => router.replace('/auth/login')}
             >
-              <Text style={styles.primaryButtonText}>Back to Sign In</Text>
-            </TouchableOpacity>
+              Back to Sign In
+            </Button>
           </>
         )}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingBottom: 80,
-    gap: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-  },
-  body: {
-    fontSize: 15,
-    color: '#555',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

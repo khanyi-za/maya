@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import React from 'react';
-import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { ThemedText } from './ThemedText';
+import { Dimensions, TouchableOpacity, View } from 'react-native';
+import { Text } from './ui/text';
+import { useThemeColors } from '@/lib/theme';
 
 interface MasonryItem {
   id: string;
@@ -23,15 +24,25 @@ interface MasonryGridProps {
 
 const { width } = Dimensions.get('window');
 
-export function MasonryGrid({ 
-  data, 
-  onItemPress, 
+// Raised-card elevation (RN shadow utilities are limited via className).
+const CARD_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 8,
+  elevation: 4,
+};
+
+export function MasonryGrid({
+  data,
+  onItemPress,
   renderItem: customRenderItem,
   spacing = 8,
-  columns = 2 
+  columns = 2,
 }: MasonryGridProps) {
+  const colors = useThemeColors();
   const itemWidth = (width - 40 - (spacing * (columns - 1))) / columns;
-  
+
   // Split data into columns
   const columnArrays: MasonryItem[][] = Array.from({ length: columns }, () => []);
   data.forEach((item, index) => {
@@ -41,36 +52,43 @@ export function MasonryGrid({
   const defaultRenderItem = (item: MasonryItem) => (
     <TouchableOpacity
       key={item.id}
-      style={[styles.item, { width: itemWidth }]}
+      style={[{ width: itemWidth }, CARD_SHADOW]}
+      className="overflow-hidden rounded-xl bg-card"
       onPress={() => onItemPress?.(item)}
       activeOpacity={0.9}
     >
-      <View style={styles.imageContainer}>
+      <View className="relative">
         <Image
           source={item.image}
-          style={[
-            styles.image,
-            { height: item.height || Math.floor(Math.random() * 100) + 200 }, // Random height for masonry effect
-          ]}
+          style={{
+            width: '100%',
+            height: item.height || Math.floor(Math.random() * 100) + 200, // Random height for masonry effect
+            borderRadius: 12,
+            backgroundColor: colors.muted,
+          }}
           contentFit="cover"
         />
       </View>
-      
-      <View style={styles.itemContent}>
-        {item.brand && <ThemedText style={styles.brand}>{item.brand}</ThemedText>}
-        <ThemedText style={styles.title} numberOfLines={2}>
+
+      <View className="p-3">
+        {item.brand && (
+          <Text variant="caption" className="mb-1 font-medium">
+            {item.brand}
+          </Text>
+        )}
+        <Text variant="label" numberOfLines={2} className="mb-1.5">
           {item.title}
-        </ThemedText>
-        <ThemedText style={styles.price}>{item.price}</ThemedText>
+        </Text>
+        <Text className="text-base font-bold text-foreground">{item.price}</Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <View style={[styles.container, { gap: spacing }]}>
+    <View className="flex-row" style={{ gap: spacing }}>
       {columnArrays.map((columnData, columnIndex) => (
-        <View key={columnIndex} style={[styles.column, { gap: spacing }]}>
-          {columnData.map((item) => 
+        <View key={columnIndex} className="flex-1" style={{ gap: spacing }}>
+          {columnData.map((item) =>
             customRenderItem ? customRenderItem({ item }) : defaultRenderItem(item)
           )}
         </View>
@@ -78,55 +96,3 @@ export function MasonryGrid({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-  },
-  column: {
-    flex: 1,
-  },
-  item: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  imageContainer: {
-    position: 'relative',
-  },
-  image: {
-    width: '100%',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-  },
-  itemContent: {
-    padding: 12,
-  },
-  brand: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#666',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
-    lineHeight: 18,
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-});

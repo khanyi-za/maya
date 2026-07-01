@@ -5,20 +5,25 @@ import {
   Alert,
   RefreshControl,
   ScrollView,
-  StatusBar,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Text } from '@/components/ui/text';
 import { useCancelOrder, useOrder, useOrderTracking } from '@/hooks/useOrderQueries';
 import { APIError, type MobileOrderStatus } from '@/lib/api-client';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
+import { ORDER_STATUS } from '@/lib/order-status';
+import { cn } from '@/lib/utils';
+import { useThemeColors } from '@/lib/theme';
 
 interface TimelineStep {
   title: string;
@@ -87,6 +92,7 @@ function buildTimeline(
 export default function TrackOrderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { orderId } = useLocalSearchParams<{ orderId?: string }>();
 
   const orderQuery = useOrder(orderId);
@@ -133,6 +139,19 @@ export default function TrackOrderScreen() {
     ]);
   };
 
+  const renderHeader = () => (
+    <View
+      className="flex-row items-center justify-between border-b border-border bg-card px-5 pb-4"
+      style={{ paddingTop: insets.top + 16 }}
+    >
+      <View className="w-10" />
+      <Text variant="heading">Track Order</Text>
+      <TouchableOpacity onPress={handleClosePress} className="p-2">
+        <IconSymbol name="xmark" size={20} color={colors.foreground} />
+      </TouchableOpacity>
+    </View>
+  );
+
   // ── Loading / error states ──
 
   if (!orderId || orderQuery.isError || (orderQuery.isSuccess && !order)) {
@@ -140,36 +159,40 @@ export default function TrackOrderScreen() {
       !orderId ||
       (orderQuery.error instanceof APIError && orderQuery.error.status === 404);
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
-          <ThemedText style={styles.stateTitle}>
+        <View className="flex-1 items-center justify-center gap-4 px-10" style={{ paddingTop: insets.top }}>
+          <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
+          <Text variant="title" className="text-center">
             {notFound ? "We couldn't find that order" : "Couldn't load your order"}
-          </ThemedText>
-          <TouchableOpacity
-            style={styles.primaryButton}
+          </Text>
+          <Button
+            variant="brand"
+            className="px-10"
             onPress={() => (notFound ? handleClosePress() : orderQuery.refetch())}
           >
-            <ThemedText style={styles.primaryButtonText}>
-              {notFound ? 'Browse YIIVA' : 'Retry'}
-            </ThemedText>
-          </TouchableOpacity>
+            {notFound ? 'Browse YIIVA' : 'Retry'}
+          </Button>
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
   if (orderQuery.isPending || !order) {
     return (
-      <ThemedView style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color="#333" />
+        {renderHeader()}
+        <View className="gap-4 p-5">
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <Skeleton className="h-56 w-full rounded-2xl" />
+          <Skeleton className="h-32 w-full rounded-2xl" />
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
+  const statusMeta = ORDER_STATUS[order.status];
   const timeline = buildTimeline(order.status, order.statusHistory);
   const address = order.shipping.address;
   const estimatedDelivery =
@@ -179,35 +202,55 @@ export default function TrackOrderScreen() {
     const isLast = index === timeline.length - 1;
 
     return (
-      <View key={step.title} style={styles.statusStep}>
-        <View style={styles.statusIndicatorContainer}>
+      <View key={step.title} className="flex-row items-start gap-4">
+        <View className="w-8 items-center">
           <View
-            style={[
-              styles.statusIndicator,
-              step.completed && styles.completedIndicator,
-              step.current && styles.currentIndicator,
-            ]}
+            className={cn(
+              'h-8 w-8 items-center justify-center rounded-full border-2',
+              step.completed
+                ? 'border-success bg-success'
+                : step.current
+                  ? 'border-brand bg-brand'
+                  : 'border-border bg-muted'
+            )}
           >
             {step.completed ? (
               <IconSymbol name="checkmark" size={16} color="#fff" />
             ) : (
-              <View style={[styles.statusDot, step.current && styles.currentDot]} />
+              <View
+                className={cn(
+                  'h-3 w-3 rounded-full',
+                  step.current ? 'bg-white' : 'bg-border'
+                )}
+              />
             )}
           </View>
           {!isLast && (
-            <View style={[styles.statusLine, step.completed && styles.completedLine]} />
+            <View className={cn('mt-2 h-10 w-0.5', step.completed ? 'bg-success' : 'bg-border')} />
           )}
         </View>
 
-        <View style={styles.statusContent}>
-          <ThemedText
-            style={[styles.statusTitle, step.current && styles.currentStatusTitle]}
+        <View className="flex-1 pb-6">
+          <Text
+            variant="label"
+            className={cn(
+              'mb-1',
+              step.current
+                ? 'text-brand'
+                : step.completed
+                  ? 'text-foreground'
+                  : 'text-muted-foreground'
+            )}
           >
             {step.title}
-          </ThemedText>
-          <ThemedText style={styles.statusDescription}>{step.description}</ThemedText>
+          </Text>
+          <Text variant="caption" className="mb-1 leading-5">
+            {step.description}
+          </Text>
           {step.timestamp && (
-            <ThemedText style={styles.statusTimestamp}>{step.timestamp}</ThemedText>
+            <Text variant="micro" className="font-normal">
+              {step.timestamp}
+            </Text>
           )}
         </View>
       </View>
@@ -215,21 +258,12 @@ export default function TrackOrderScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <View style={styles.headerSpacer} />
-        <ThemedText style={styles.headerTitle}>Track Order</ThemedText>
-        <TouchableOpacity onPress={handleClosePress} style={styles.closeButton}>
-          <IconSymbol name="xmark" size={20} color="#000" />
-        </TouchableOpacity>
-      </View>
+      {renderHeader()}
 
       <ScrollView
-        style={styles.scrollView}
+        className="flex-1"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -238,58 +272,71 @@ export default function TrackOrderScreen() {
               orderQuery.refetch();
               trackingQuery.refetch();
             }}
+            tintColor={colors.mutedForeground}
           />
         }
       >
         {/* Order Info Card */}
-        <View style={styles.orderInfoCard}>
-          <View style={styles.orderHeader}>
-            <View style={styles.orderInfo}>
-              <ThemedText style={styles.orderNumber}>{order.orderNumber}</ThemedText>
-              <ThemedText style={styles.orderTotal}>{formatZAR(order.total)}</ThemedText>
+        <Card className="mx-5 mt-5 p-5">
+          <View className="mb-4 flex-row items-start justify-between gap-3">
+            <View className="flex-1">
+              <Text variant="heading" className="mb-1">
+                {order.orderNumber}
+              </Text>
+              <Text className="text-[16px] font-semibold text-brand">
+                {formatZAR(order.total)}
+              </Text>
             </View>
+            <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
           </View>
 
-          <ThemedText style={styles.itemsHeader}>
+          <Text variant="caption" className="mb-3 mt-1 font-semibold">
             Items ({order.items.reduce((sum, item) => sum + item.quantity, 0)})
-          </ThemedText>
+          </Text>
 
           {order.items.map((item) => {
             const imageAsset = imageSource(item.image);
             return (
-              <View key={item.id} style={styles.productInfo}>
+              <View
+                key={item.id}
+                className="mb-3 flex-row items-center gap-3 border-b border-border pb-3"
+              >
                 {imageAsset ? (
-                  <Image source={imageAsset} style={styles.productImage} contentFit="cover" />
+                  <Image
+                    source={imageAsset}
+                    style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
+                    contentFit="cover"
+                  />
                 ) : (
-                  <View style={styles.productImagePlaceholder} />
+                  <View className="h-20 w-[60px] rounded-lg bg-muted" />
                 )}
-                <View style={styles.productDetails}>
-                  <ThemedText style={styles.productTitle} numberOfLines={2}>
+                <View className="flex-1">
+                  <Text variant="label" numberOfLines={2} className="mb-1">
                     {item.name}
-                  </ThemedText>
-                  <ThemedText style={styles.artistName}>
+                  </Text>
+                  <Text variant="caption" className="mb-1 italic">
                     By {item.merchant.displayName}
-                  </ThemedText>
+                  </Text>
                   {item.size && (
-                    <ThemedText style={styles.productSize}>Size: {item.size}</ThemedText>
+                    <Text variant="caption" className="mb-2">
+                      Size: {item.size}
+                    </Text>
                   )}
-                  <View style={styles.productPriceRow}>
-                    <ThemedText style={styles.productQuantity}>
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="caption" className="font-semibold">
                       Qty: {item.quantity}
-                    </ThemedText>
-                    <ThemedText style={styles.productPrice}>
-                      {formatZAR(item.lineTotal)}
-                    </ThemedText>
+                    </Text>
+                    <Text variant="label">{formatZAR(item.lineTotal)}</Text>
                   </View>
                 </View>
               </View>
             );
           })}
 
-          <View style={styles.deliveryInfo}>
-            <View style={styles.deliveryRow}>
-              <IconSymbol name="calendar" size={16} color="#666" />
-              <ThemedText style={styles.deliveryText}>
+          <View className="gap-2">
+            <View className="flex-row items-center gap-2">
+              <IconSymbol name="calendar" size={16} color={colors.mutedForeground} />
+              <Text variant="caption" className="flex-1">
                 Estimated delivery:{' '}
                 {estimatedDelivery
                   ? new Date(estimatedDelivery).toLocaleDateString('en-ZA', {
@@ -297,513 +344,138 @@ export default function TrackOrderScreen() {
                       month: 'long',
                     })
                   : 'To be confirmed'}
-              </ThemedText>
+              </Text>
             </View>
-            <View style={styles.deliveryRow}>
-              <IconSymbol name="location" size={16} color="#666" />
-              <ThemedText style={styles.deliveryText}>
+            <View className="flex-row items-center gap-2">
+              <IconSymbol name="location" size={16} color={colors.mutedForeground} />
+              <Text variant="caption" className="flex-1">
                 {address.line1}, {address.city}, {address.postalCode}
-              </ThemedText>
+              </Text>
             </View>
           </View>
-        </View>
+        </Card>
 
         {/* Cancelled banner OR Status Timeline */}
         {order.status === 'CANCELLED' ? (
-          <View style={styles.timelineCard}>
-            <View style={styles.cancelledRow}>
-              <IconSymbol name="slash.circle" size={24} color="#b3261e" />
-              <View style={styles.cancelledContent}>
-                <ThemedText style={styles.cancelledTitle}>Order cancelled</ThemedText>
-                <ThemedText style={styles.statusDescription}>
+          <Card className="mx-5 mt-4 p-5">
+            <View className="flex-row items-start gap-3">
+              <IconSymbol name="slash.circle" size={24} color={colors.danger} />
+              <View className="flex-1">
+                <Text variant="label" className="mb-1 text-danger">
+                  Order cancelled
+                </Text>
+                <Text variant="caption" className="leading-5">
                   This order has been cancelled and won&apos;t be delivered.
-                </ThemedText>
+                </Text>
               </View>
             </View>
-          </View>
+          </Card>
         ) : (
-          <View style={styles.timelineCard}>
-            <ThemedText style={styles.timelineTitle}>Order Status</ThemedText>
-            <View style={styles.timeline}>
-              {timeline.map((step, index) => renderStatusStep(step, index))}
-            </View>
-          </View>
+          <Card className="mx-5 mt-4 p-5">
+            <Text variant="heading" className="mb-5">
+              Order Status
+            </Text>
+            <View>{timeline.map((step, index) => renderStatusStep(step, index))}</View>
+          </Card>
         )}
 
         {/* Courier Tracking */}
         {order.status !== 'CANCELLED' && (
-          <View style={styles.timelineCard}>
-            <ThemedText style={styles.timelineTitle}>Courier Tracking</ThemedText>
+          <Card className="mx-5 mt-4 p-5">
+            <Text variant="heading" className="mb-5">
+              Courier Tracking
+            </Text>
             {trackingQuery.isPending ? (
-              <ActivityIndicator size="small" color="#333" />
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
             ) : tracking ? (
               <>
-                <View style={styles.trackingHeaderRow}>
-                  <ThemedText style={styles.trackingWaybill}>
+                <View className="mb-3">
+                  <Text variant="label">
                     {tracking.courier} · {tracking.trackingNumber}
-                  </ThemedText>
+                  </Text>
                 </View>
                 {tracking.events.length === 0 ? (
-                  <ThemedText style={styles.statusDescription}>
+                  <Text variant="caption" className="leading-5">
                     No scans yet — updates appear here as the parcel moves.
-                  </ThemedText>
+                  </Text>
                 ) : (
                   tracking.events.map((event, index) => (
-                    <View key={index} style={styles.trackingEvent}>
-                      <ThemedText style={styles.trackingEventDescription}>
+                    <View key={index} className="border-b border-border py-2.5">
+                      <Text className="mb-0.5 text-[14px] font-medium text-foreground">
                         {event.description ?? 'Update'}
-                      </ThemedText>
-                      <ThemedText style={styles.trackingEventMeta}>
+                      </Text>
+                      <Text variant="micro" className="font-normal">
                         {[formatDateTime(event.at), event.location]
                           .filter(Boolean)
                           .join(' · ')}
-                      </ThemedText>
+                      </Text>
                     </View>
                   ))
                 )}
               </>
             ) : trackingPending ? (
-              <ThemedText style={styles.statusDescription}>
+              <Text variant="caption" className="leading-5">
                 The courier hasn&apos;t collected your order yet. Tracking will
                 appear here once it&apos;s on the move.
-              </ThemedText>
+              </Text>
             ) : (
-              <ThemedText style={styles.statusDescription}>
+              <Text variant="caption" className="leading-5">
                 Couldn&apos;t load tracking right now. Pull to refresh.
-              </ThemedText>
+              </Text>
             )}
-          </View>
+          </Card>
         )}
 
         {/* Actions */}
-        <View style={styles.actionsCard}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleContactBrand}>
-            <IconSymbol name="message" size={20} color="#007AFF" />
-            <View style={styles.actionButtonContent}>
-              <ThemedText style={styles.actionButtonTitle}>
+        <Card className="mx-5 mt-4 p-5">
+          <TouchableOpacity className="flex-row items-center gap-3 py-1" onPress={handleContactBrand}>
+            <IconSymbol name="message" size={20} color={colors.brand} />
+            <View className="flex-1">
+              <Text variant="label" className="mb-0.5">
                 Contact {order.items[0]?.merchant.displayName ?? 'the brand'}
-              </ThemedText>
-              <ThemedText style={styles.actionButtonSubtitle}>
-                Ask questions about your order
-              </ThemedText>
+              </Text>
+              <Text variant="caption">Ask questions about your order</Text>
             </View>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
+            <IconSymbol name="chevron.right" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
 
           {canCancel && (
             <>
-              <View style={styles.actionDivider} />
+              <Separator className="my-4" />
               <TouchableOpacity
-                style={styles.actionButton}
+                className="flex-row items-center gap-3 py-1"
                 onPress={handleCancelOrder}
                 disabled={cancelMutation.isPending}
               >
-                <IconSymbol name="xmark.circle" size={20} color="#b3261e" />
-                <View style={styles.actionButtonContent}>
-                  <ThemedText style={[styles.actionButtonTitle, styles.cancelActionTitle]}>
+                <IconSymbol name="xmark.circle" size={20} color={colors.danger} />
+                <View className="flex-1">
+                  <Text variant="label" className="mb-0.5 text-danger">
                     {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
-                  </ThemedText>
-                  <ThemedText style={styles.actionButtonSubtitle}>
-                    Free cancellation before dispatch
-                  </ThemedText>
+                  </Text>
+                  <Text variant="caption">Free cancellation before dispatch</Text>
                 </View>
-                <IconSymbol name="chevron.right" size={16} color="#666" />
+                <IconSymbol name="chevron.right" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
             </>
           )}
-        </View>
+        </Card>
 
         {/* Help Section */}
-        <View style={styles.helpCard}>
-          <IconSymbol name="questionmark.circle" size={24} color="#666" />
-          <View style={styles.helpContent}>
-            <ThemedText style={styles.helpTitle}>Need Help?</ThemedText>
-            <ThemedText style={styles.helpText}>
+        <Card className="mx-5 mt-4 flex-row items-start gap-3 p-5">
+          <IconSymbol name="questionmark.circle" size={24} color={colors.mutedForeground} />
+          <View className="flex-1">
+            <Text variant="label" className="mb-1">
+              Need Help?
+            </Text>
+            <Text variant="caption" className="leading-5">
               If you have any questions about your order, feel free to contact
               the brand directly.
-            </ThemedText>
+            </Text>
           </View>
-        </View>
+        </Card>
 
-        {/* Bottom Padding */}
-        <View style={styles.bottomPadding} />
+        <View className="h-10" />
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
-    backgroundColor: '#fff',
-  },
-  stateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  closeButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  headerSpacer: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  orderInfoCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  orderInfo: {
-    flex: 1,
-  },
-  orderNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 4,
-  },
-  orderTotal: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    fontFamily: 'Didot',
-  },
-  itemsHeader: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 12,
-    marginTop: 4,
-  },
-  productInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  productImage: {
-    width: 60,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  productImagePlaceholder: {
-    width: 60,
-    height: 80,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-  },
-  productDetails: {
-    flex: 1,
-  },
-  productTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  artistName: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
-    marginBottom: 4,
-  },
-  productSize: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-  },
-  productPriceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  productQuantity: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  deliveryInfo: {
-    gap: 8,
-  },
-  deliveryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  deliveryText: {
-    fontSize: 14,
-    color: '#666',
-    flex: 1,
-  },
-  timelineCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  timelineTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 20,
-  },
-  timeline: {
-    gap: 0,
-  },
-  cancelledRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  cancelledContent: {
-    flex: 1,
-  },
-  cancelledTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#b3261e',
-    marginBottom: 4,
-  },
-  trackingHeaderRow: {
-    marginBottom: 12,
-  },
-  trackingWaybill: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  trackingEvent: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  trackingEventDescription: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000',
-    marginBottom: 2,
-  },
-  trackingEventMeta: {
-    fontSize: 12,
-    color: '#999',
-  },
-  statusStep: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-  },
-  statusIndicatorContainer: {
-    alignItems: 'center',
-    width: 32,
-  },
-  statusIndicator: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-  },
-  completedIndicator: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
-  },
-  currentIndicator: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#ccc',
-  },
-  currentDot: {
-    backgroundColor: '#fff',
-  },
-  statusLine: {
-    width: 2,
-    height: 40,
-    backgroundColor: '#e0e0e0',
-    marginTop: 8,
-  },
-  completedLine: {
-    backgroundColor: '#4CAF50',
-  },
-  statusContent: {
-    flex: 1,
-    paddingBottom: 24,
-  },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  currentStatusTitle: {
-    color: '#007AFF',
-  },
-  statusDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  statusTimestamp: {
-    fontSize: 12,
-    color: '#999',
-  },
-  actionsCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 4,
-  },
-  actionButtonContent: {
-    flex: 1,
-  },
-  actionButtonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 2,
-  },
-  cancelActionTitle: {
-    color: '#b3261e',
-  },
-  actionButtonSubtitle: {
-    fontSize: 14,
-    color: '#666',
-  },
-  actionDivider: {
-    height: 1,
-    backgroundColor: '#f0f0f0',
-    marginVertical: 16,
-  },
-  helpCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  helpContent: {
-    flex: 1,
-  },
-  helpTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  helpText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  bottomPadding: {
-    height: 40,
-  },
-});

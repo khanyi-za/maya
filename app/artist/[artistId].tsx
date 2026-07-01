@@ -9,8 +9,6 @@ import {
   NativeSyntheticEvent,
   RefreshControl,
   ScrollView,
-  StatusBar,
-  StyleSheet,
   TouchableOpacity,
   View,
   Modal,
@@ -18,9 +16,16 @@ import {
   Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ThemedText } from '@/components/ThemedText';
+import { Text } from '@/components/ui/text';
+import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { EvenGrid } from '@/components/EvenGrid';
+import { useThemeColors } from '@/lib/theme';
 import { resolveFollowed, useServerSocial } from '@/lib/server-social';
 import { useRequireAuth, useToggleFollow } from '@/hooks/useSocialMutations';
 import { imageSource } from '@/lib/image-source';
@@ -62,13 +67,13 @@ function HeroMediaItem({
   );
 
   return (
-    <View style={styles.heroMediaContainer}>
+    <View className="h-full" style={{ width: screenWidth }}>
       {media.type === 'image' ? (
-        <Image source={media.source} style={styles.heroMedia} contentFit="cover" />
+        <Image source={media.source} style={{ width: '100%', height: '100%' }} contentFit="cover" />
       ) : (
         <VideoView
           player={videoPlayer}
-          style={styles.heroMedia}
+          style={{ width: '100%', height: '100%' }}
           contentFit="cover"
           nativeControls={false}
         />
@@ -80,6 +85,7 @@ function HeroMediaItem({
 export default function ArtistProfileScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const colors = useThemeColors();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
@@ -173,9 +179,30 @@ export default function ArtistProfileScreen() {
 
   if (profileQuery.isPending) {
     return (
-      <View style={[styles.container, styles.stateContainer]}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color="#333" />
+        {/* Banner */}
+        <Skeleton className="w-full rounded-none" style={{ height: screenWidth * 1.2 }} />
+        {/* Avatar overlapping the banner */}
+        <View className="px-5">
+          <Skeleton className="w-20 h-20 rounded-full -mt-10 border-4 border-background" />
+        </View>
+        {/* Name */}
+        <Skeleton className="h-5 w-1/2 mt-4 mx-5" />
+        {/* Action buttons */}
+        <View className="flex-row gap-3 px-5 mt-4">
+          <Skeleton className="h-11 flex-1 rounded-lg" />
+          <Skeleton className="h-11 flex-1 rounded-lg" />
+        </View>
+        {/* Bio */}
+        <Skeleton className="h-4 w-3/4 mx-5 mt-6" />
+        <Skeleton className="h-4 w-2/3 mx-5 mt-2" />
+        {/* Product grid */}
+        <View className="flex-row flex-wrap justify-between px-4 mt-8 gap-y-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="w-[48%] aspect-square rounded-lg" />
+          ))}
+        </View>
       </View>
     );
   }
@@ -184,42 +211,50 @@ export default function ArtistProfileScreen() {
     const notFound =
       profileQuery.error instanceof APIError && profileQuery.error.status === 404;
     return (
-      <View style={[styles.container, styles.stateContainer]}>
+      <View className="flex-1 bg-background items-center justify-center px-10 gap-4">
         <Stack.Screen options={{ headerShown: false }} />
-        <ThemedText style={styles.stateTitle}>
+        <Text variant="heading" className="text-center">
           {notFound ? 'Brand not found' : "Couldn't load this brand"}
-        </ThemedText>
-        <TouchableOpacity
-          style={styles.stateButton}
+        </Text>
+        <Button
+          variant="primary"
+          className="rounded-full px-8"
           onPress={() =>
             notFound ? router.dismissTo('/(tabs)') : profileQuery.refetch()
           }
         >
-          <ThemedText style={styles.stateButtonText}>
-            {notFound ? 'Browse YIIVA' : 'Retry'}
-          </ThemedText>
-        </TouchableOpacity>
+          {notFound ? 'Browse YIIVA' : 'Retry'}
+        </Button>
         <TouchableOpacity onPress={() => router.back()}>
-          <ThemedText style={styles.stateBackLink}>Go back</ThemedText>
+          <Text variant="caption" className="underline">
+            Go back
+          </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   if (merchant.status !== 'ACTIVE') {
+    const suspended = merchant.status === 'SUSPENDED';
     return (
-      <View style={[styles.container, styles.stateContainer]}>
+      <View className="flex-1 bg-background items-center justify-center px-10 gap-4">
         <Stack.Screen options={{ headerShown: false }} />
-        <ThemedText style={styles.stateTitle}>{merchant.displayName}</ThemedText>
-        <ThemedText style={styles.stateText}>
+        <Text variant="heading" className="text-center">
+          {merchant.displayName}
+        </Text>
+        <Badge tone={suspended ? 'warning' : 'neutral'}>
+          {suspended ? 'Suspended' : 'Unavailable'}
+        </Badge>
+        <Text variant="body" className="text-muted-foreground text-center">
           This brand is currently unavailable on YIIVA.
-        </ThemedText>
-        <TouchableOpacity
-          style={styles.stateButton}
+        </Text>
+        <Button
+          variant="primary"
+          className="rounded-full px-8"
           onPress={() => router.dismissTo('/(tabs)')}
         >
-          <ThemedText style={styles.stateButtonText}>Browse YIIVA</ThemedText>
-        </TouchableOpacity>
+          Browse YIIVA
+        </Button>
       </View>
     );
   }
@@ -228,9 +263,8 @@ export default function ArtistProfileScreen() {
   const contactEmail = merchant.contact.email;
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Contact Modal */}
       <Modal
@@ -239,67 +273,67 @@ export default function ArtistProfileScreen() {
         animationType="fade"
         onRequestClose={() => setShowContactModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View className="flex-1 items-center justify-center">
           <Pressable
-            style={styles.modalBackdrop}
+            className="absolute inset-0 bg-black/50"
             onPress={() => setShowContactModal(false)}
           />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>
-                Contact {merchant.displayName}
-              </ThemedText>
+          <Card className="w-[85%] max-w-[400px]">
+            <View className="flex-row justify-between items-center px-5 pt-5 pb-4">
+              <Text variant="heading">Contact {merchant.displayName}</Text>
               <TouchableOpacity
                 onPress={() => setShowContactModal(false)}
-                style={styles.modalCloseButton}
+                className="p-1"
               >
-                <IconSymbol name="xmark" size={20} color="#666" />
+                <IconSymbol name="xmark" size={20} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
+            <Separator />
 
-            <View style={styles.modalOptions}>
-              <TouchableOpacity style={styles.contactOption} onPress={handleSendMessage}>
-                <View style={styles.contactOptionIcon}>
-                  <IconSymbol name="message" size={24} color="#007AFF" />
+            <View className="py-2">
+              <TouchableOpacity
+                className="flex-row items-center px-5 py-4 gap-4"
+                onPress={handleSendMessage}
+              >
+                <View className="w-12 h-12 rounded-full bg-brand-subtle items-center justify-center">
+                  <IconSymbol name="message" size={24} color={colors.brand} />
                 </View>
-                <View style={styles.contactOptionContent}>
-                  <ThemedText style={styles.contactOptionTitle}>
-                    Message {merchant.displayName}
-                  </ThemedText>
-                  <ThemedText style={styles.contactOptionSubtitle}>
-                    Send a direct message
-                  </ThemedText>
+                <View className="flex-1">
+                  <Text variant="label">Message {merchant.displayName}</Text>
+                  <Text variant="caption">Send a direct message</Text>
                 </View>
-                <IconSymbol name="chevron.right" size={20} color="#ccc" />
+                <IconSymbol name="chevron.right" size={20} color={colors.border} />
               </TouchableOpacity>
 
               {contactEmail && (
-                <TouchableOpacity style={styles.contactOption} onPress={handleSendEmail}>
-                  <View style={styles.contactOptionIcon}>
-                    <IconSymbol name="envelope" size={24} color="#007AFF" />
+                <TouchableOpacity
+                  className="flex-row items-center px-5 py-4 gap-4"
+                  onPress={handleSendEmail}
+                >
+                  <View className="w-12 h-12 rounded-full bg-brand-subtle items-center justify-center">
+                    <IconSymbol name="envelope" size={24} color={colors.brand} />
                   </View>
-                  <View style={styles.contactOptionContent}>
-                    <ThemedText style={styles.contactOptionTitle}>Email</ThemedText>
-                    <ThemedText style={styles.contactOptionSubtitle}>
-                      {contactEmail}
-                    </ThemedText>
+                  <View className="flex-1">
+                    <Text variant="label">Email</Text>
+                    <Text variant="caption">{contactEmail}</Text>
                   </View>
-                  <IconSymbol name="chevron.right" size={20} color="#ccc" />
+                  <IconSymbol name="chevron.right" size={20} color={colors.border} />
                 </TouchableOpacity>
               )}
             </View>
-          </View>
+          </Card>
         </View>
       </Modal>
 
       <ScrollView
-        style={styles.container}
+        className="flex-1"
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={profileQuery.isRefetching}
+            tintColor={colors.mutedForeground}
             onRefresh={() => {
               profileQuery.refetch();
               productsQuery.refetch();
@@ -308,7 +342,7 @@ export default function ArtistProfileScreen() {
         }
       >
         {/* Hero Section */}
-        <View style={[styles.heroSection, { height: screenWidth * 1.2 }]}>
+        <View className="relative" style={{ height: screenWidth * 1.2 }}>
           {heroMediaItems.length > 0 ? (
             <ScrollView
               horizontal
@@ -316,7 +350,7 @@ export default function ArtistProfileScreen() {
               showsHorizontalScrollIndicator={false}
               onScroll={handleMediaScroll}
               scrollEventThrottle={16}
-              style={styles.heroCarousel}
+              className="w-full h-full"
             >
               {heroMediaItems.map((media, index) => (
                 <HeroMediaItem
@@ -329,21 +363,22 @@ export default function ArtistProfileScreen() {
               ))}
             </ScrollView>
           ) : (
-            <View style={[styles.heroCarousel, styles.heroPlaceholder]}>
+            <View className="w-full h-full bg-black items-center justify-center">
               {merchant.logo && (
                 <Image
                   source={imageSource(merchant.logo)}
-                  style={styles.heroPlaceholderLogo}
+                  style={{ width: '100%', height: '100%', opacity: 0.4 }}
                   contentFit="cover"
                 />
               )}
             </View>
           )}
 
-          <View style={styles.heroOverlay} pointerEvents="none" />
+          <View className="absolute inset-0 bg-black/30" pointerEvents="none" />
 
           <TouchableOpacity
-            style={[styles.closeButton, { top: insets.top + 10 }]}
+            className="absolute left-5 w-10 h-10 rounded-full bg-black/50 items-center justify-center"
+            style={{ top: insets.top + 10 }}
             onPress={() => router.back()}
           >
             <IconSymbol name="chevron.left" size={24} color="#fff" />
@@ -351,7 +386,8 @@ export default function ArtistProfileScreen() {
 
           {hasVideo && (
             <TouchableOpacity
-              style={[styles.muteButton, { top: insets.top + 10 }]}
+              className="absolute right-5 w-10 h-10 rounded-full bg-black/50 items-center justify-center"
+              style={{ top: insets.top + 10 }}
               onPress={toggleVideoMute}
             >
               <IconSymbol
@@ -362,20 +398,25 @@ export default function ArtistProfileScreen() {
             </TouchableOpacity>
           )}
 
-          <View style={styles.profilePictureContainer}>
-            <Image
-              source={imageSource(merchant.logo)}
-              style={[styles.profilePicture, styles.profilePlaceholder]}
-              contentFit="cover"
+          <View className="absolute left-5" style={{ bottom: -30 }}>
+            <Avatar
+              uri={merchant.logo}
+              fallback={merchant.displayName?.charAt(0)}
+              size={80}
+              className="border-4 border-background"
             />
           </View>
 
           {heroMediaItems.length > 1 && (
-            <View style={styles.dotContainer}>
+            <View className="absolute bottom-5 left-0 right-0 flex-row justify-center items-center gap-2">
               {heroMediaItems.map((_, index) => (
                 <View
                   key={index}
-                  style={[styles.dot, index === currentMediaIndex && styles.activeDot]}
+                  className={
+                    index === currentMediaIndex
+                      ? 'w-2 h-2 rounded-full bg-white'
+                      : 'w-2 h-2 rounded-full bg-white/50'
+                  }
                 />
               ))}
             </View>
@@ -383,98 +424,117 @@ export default function ArtistProfileScreen() {
         </View>
 
         {/* Merchant Name */}
-        <View style={styles.merchantNameSection}>
-          <ThemedText style={styles.merchantName}>{merchant.displayName}</ThemedText>
-          {merchant.isVerified && (
-            <IconSymbol name="checkmark.seal.fill" size={20} color="#007AFF" />
-          )}
+        <View className="flex-row items-center px-5 gap-3 mb-3" style={{ paddingTop: 35.2 }}>
+          <Text variant="heading" className="tracking-wide">
+            {merchant.displayName}
+          </Text>
+          {merchant.isVerified && <Badge tone="brand">Verified</Badge>}
         </View>
 
         {/* Action Buttons */}
-        <View style={styles.actionsSection}>
-          <TouchableOpacity
-            style={[styles.followButton, isFollowing && styles.followingButton]}
+        <View className="flex-row items-center px-5 pt-4 gap-3">
+          <Button
+            variant={isFollowing ? 'outline' : 'brand'}
+            className="flex-1 rounded-full"
             onPress={handleFollow}
           >
-            <ThemedText
-              style={[styles.followButtonText, isFollowing && styles.followingButtonText]}
-            >
-              {isFollowing ? 'Following' : 'Follow'}
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.contactButton} onPress={handleContact}>
-            <ThemedText style={styles.contactButtonText}>Contact</ThemedText>
-          </TouchableOpacity>
+            {isFollowing ? 'Following' : 'Follow'}
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 rounded-full"
+            onPress={handleContact}
+          >
+            Contact
+          </Button>
         </View>
 
         {/* Bio Section */}
-        <View style={styles.bioSection}>
+        <View className="px-5 pt-5 pb-3">
           {merchant.bio ? (
-            <ThemedText style={styles.bioText}>{merchant.bio}</ThemedText>
+            <Text variant="body" className="mb-3">
+              {merchant.bio}
+            </Text>
           ) : null}
           {merchant.location ? (
-            <View style={styles.locationContainer}>
-              <IconSymbol name="location.fill" size={14} color="#666" />
-              <ThemedText style={styles.locationText}>{merchant.location}</ThemedText>
+            <View className="flex-row items-center gap-1.5">
+              <IconSymbol name="location.fill" size={14} color={colors.mutedForeground} />
+              <Text variant="caption">{merchant.location}</Text>
             </View>
           ) : null}
         </View>
 
         {/* Category Tabs */}
         {categories.length > 0 && (
-          <View style={styles.categorySection}>
+          <View className="pt-2 pb-4">
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryScrollContainer}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
             >
-              {['All', ...categories].map((category) => (
-                <TouchableOpacity
-                  key={category}
-                  style={[
-                    styles.categoryTab,
-                    selectedCategory === category && styles.selectedCategoryTab,
-                  ]}
-                  onPress={() => setSelectedCategory(category)}
-                >
-                  <ThemedText
-                    style={[
-                      styles.categoryTabText,
-                      selectedCategory === category && styles.selectedCategoryTabText,
-                    ]}
+              {['All', ...categories].map((category) => {
+                const selected = selectedCategory === category;
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    className={
+                      selected
+                        ? 'px-4 py-2 rounded-sm border-b-2 border-foreground'
+                        : 'px-4 py-2 rounded-sm bg-muted border-b-2 border-transparent'
+                    }
+                    onPress={() => setSelectedCategory(category)}
                   >
-                    {category === 'All'
-                      ? 'All'
-                      : category.charAt(0).toUpperCase() + category.slice(1)}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      variant="caption"
+                      className={selected ? 'text-foreground font-semibold' : ''}
+                    >
+                      {category === 'All'
+                        ? 'All'
+                        : category.charAt(0).toUpperCase() + category.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         )}
 
         {/* Product Grid */}
         {productsQuery.isPending ? (
-          <View style={styles.gridStateContainer}>
-            <ActivityIndicator size="small" color="#333" />
+          <View className="flex-row flex-wrap justify-between px-4 gap-y-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="w-[48%] aspect-square rounded-lg" />
+            ))}
           </View>
         ) : productsQuery.isError ? (
-          <View style={styles.gridStateContainer}>
-            <ThemedText style={styles.stateText}>
+          <View className="py-10 items-center gap-3">
+            <Text variant="body" className="text-muted-foreground text-center">
               Couldn&apos;t load this brand&apos;s products.
-            </ThemedText>
-            <TouchableOpacity
-              style={styles.stateButton}
+            </Text>
+            <Button
+              variant="primary"
+              className="rounded-full px-8"
               onPress={() => productsQuery.refetch()}
             >
-              <ThemedText style={styles.stateButtonText}>Retry</ThemedText>
-            </TouchableOpacity>
+              Retry
+            </Button>
+          </View>
+        ) : gridData.length === 0 ? (
+          <View className="py-16 items-center gap-3">
+            <IconSymbol name="bag" size={40} color={colors.mutedForeground} />
+            <Text variant="body" className="text-muted-foreground text-center">
+              No products yet.
+            </Text>
           </View>
         ) : (
           <>
             <EvenGrid data={gridData} onItemPress={handleGridItemPress} />
             {productsQuery.isFetchingNextPage && (
-              <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+              <ActivityIndicator
+                size="small"
+                color={colors.mutedForeground}
+                className="my-4"
+              />
             )}
           </>
         )}
@@ -482,322 +542,3 @@ export default function ArtistProfileScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  stateContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  stateTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-  },
-  stateText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  stateButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  stateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  stateBackLink: {
-    fontSize: 14,
-    color: '#666',
-    textDecorationLine: 'underline',
-  },
-  gridStateContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-    gap: 12,
-  },
-  pagingSpinner: {
-    marginVertical: 16,
-  },
-  heroSection: {
-    position: 'relative',
-  },
-  heroCarousel: {
-    width: '100%',
-    height: '100%',
-  },
-  heroPlaceholder: {
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heroPlaceholderLogo: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.4,
-  },
-  heroMediaContainer: {
-    width: screenWidth,
-    height: '100%',
-  },
-  heroMedia: {
-    width: '100%',
-    height: '100%',
-  },
-  heroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-  },
-  closeButton: {
-    position: 'absolute',
-    left: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  muteButton: {
-    position: 'absolute',
-    right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profilePictureContainer: {
-    position: 'absolute',
-    bottom: -30,
-    left: 20,
-  },
-  profilePicture: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: '#fff',
-  },
-  profilePlaceholder: {
-    backgroundColor: '#ddd',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dotContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  activeDot: {
-    backgroundColor: 'rgba(255, 255, 255, 1)',
-  },
-  merchantNameSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 35.2,
-    gap: 12,
-    marginBottom: 12,
-  },
-  merchantName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    fontFamily: 'Roboto',
-    letterSpacing: 0.5,
-  },
-  actionsSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 10.56,
-  },
-  followButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 23.94,
-    paddingVertical: 8.98,
-    borderRadius: 17.95,
-    flex: 1,
-    alignItems: 'center',
-  },
-  followingButton: {
-    backgroundColor: '#f0f0f0',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  followButtonText: {
-    color: '#fff',
-    fontSize: 11.97,
-    fontWeight: '600',
-  },
-  followingButtonText: {
-    color: '#666',
-  },
-  contactButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 23.94,
-    paddingVertical: 8.98,
-    borderRadius: 17.95,
-    flex: 1,
-    alignItems: 'center',
-  },
-  contactButtonText: {
-    color: '#fff',
-    fontSize: 11.97,
-    fontWeight: '600',
-  },
-  bioSection: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 11,
-  },
-  bioText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locationText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  categorySection: {
-    paddingTop: 8.8,
-    paddingBottom: 16,
-  },
-  categoryScrollContainer: {
-    paddingHorizontal: 20,
-    gap: 7.8,
-  },
-  categoryTab: {
-    paddingHorizontal: 15.6,
-    paddingVertical: 7.8,
-    borderRadius: 3.9,
-    backgroundColor: '#f8f8f8',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  selectedCategoryTab: {
-    backgroundColor: 'transparent',
-    borderBottomColor: '#000',
-  },
-  categoryTabText: {
-    fontSize: 10.4,
-    fontWeight: '500',
-    color: '#666',
-  },
-  selectedCategoryTabText: {
-    color: '#000',
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    width: '85%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalOptions: {
-    paddingVertical: 8,
-  },
-  contactOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 16,
-  },
-  contactOptionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactOptionContent: {
-    flex: 1,
-  },
-  contactOptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  contactOptionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-  },
-});

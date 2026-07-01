@@ -1,15 +1,11 @@
 import React, { useMemo, useRef } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
+import { useThemeColors } from '@/lib/theme';
 import { clearPaymentSession, getPaymentSession } from '@/lib/payment-session';
 
 // Must match checkout.tsx's RETURN_URL/CANCEL_URL prefix. The WebView intercepts
@@ -25,13 +21,9 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/**
- * PayFast hosted-payment WebView. Auto-submits the signed form payload from
- * POST /api/orders, then intercepts the yiivaapp://payment-return deep link
- * PayFast redirects to (docs/screens/04-checkout/api-contract.md).
- */
 export default function PayfastScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const session = useMemo(getPaymentSession, []);
   const finished = useRef(false);
 
@@ -74,27 +66,33 @@ export default function PayfastScreen() {
   };
 
   if (!session) {
-    // Deep-linked here without a live session (e.g. cold start) — bail out.
     return (
-      <View style={[styles.container, styles.center]}>
+      <View className="flex-1 items-center justify-center gap-4 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <Text style={styles.missingText}>No payment in progress.</Text>
-        <TouchableOpacity style={styles.button} onPress={() => router.dismissTo('/(tabs)')}>
-          <Text style={styles.buttonText}>Back to Home</Text>
-        </TouchableOpacity>
+        <Text variant="body" className="text-muted-foreground">
+          No payment in progress.
+        </Text>
+        <Button variant="brand" className="px-8" onPress={() => router.dismissTo('/(tabs)')}>
+          Back to Home
+        </Button>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-          <Text style={styles.closeText}>✕</Text>
+      <View
+        className="flex-row items-center border-b border-border px-4 pb-2.5"
+        style={{ paddingTop: insets.top + 8 }}
+      >
+        <TouchableOpacity onPress={handleClose} className="h-9 w-9 items-center justify-center">
+          <Text className="text-[20px] text-foreground">✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Secure payment</Text>
-        <View style={styles.headerSpacer} />
+        <Text variant="heading" className="flex-1 text-center">
+          Secure payment
+        </Text>
+        <View className="w-9" />
       </View>
 
       <WebView
@@ -102,8 +100,8 @@ export default function PayfastScreen() {
         originWhitelist={['*']}
         startInLoadingState
         renderLoading={() => (
-          <View style={[StyleSheet.absoluteFill, styles.center]}>
-            <ActivityIndicator size="large" color="#333" />
+          <View style={StyleSheet.absoluteFill} className="items-center justify-center bg-background">
+            <ActivityIndicator size="large" color={colors.mutedForeground} />
           </View>
         )}
         onShouldStartLoadWithRequest={(request) => {
@@ -123,58 +121,3 @@ export default function PayfastScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  center: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeText: {
-    fontSize: 20,
-    color: '#000',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  headerSpacer: {
-    width: 36,
-  },
-  missingText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  button: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});

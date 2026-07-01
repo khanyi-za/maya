@@ -3,30 +3,25 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
-  StatusBar,
-  StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Text } from '@/components/ui/text';
 import { useOrders } from '@/hooks/useOrderQueries';
 import { useAuthStore } from '@/lib/auth-store';
-import type { MobileOrderStatus, OrderListItem } from '@/lib/api-client';
+import type { OrderListItem } from '@/lib/api-client';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
-
-const STATUS_META: Record<MobileOrderStatus, { label: string; fg: string; bg: string }> = {
-  PENDING_PAYMENT: { label: 'Awaiting payment', fg: '#9a6700', bg: '#fff4e0' },
-  PAYMENT_FAILED: { label: 'Payment failed', fg: '#b3261e', bg: '#fdecec' },
-  CONFIRMED: { label: 'Confirmed', fg: '#1c7c44', bg: '#e8f6ee' },
-  PREPARING: { label: 'Being prepared', fg: '#1c7c44', bg: '#e8f6ee' },
-  SHIPPED: { label: 'Shipped', fg: '#1a73e8', bg: '#e8f0fe' },
-  DELIVERED: { label: 'Delivered', fg: '#1c7c44', bg: '#e8f6ee' },
-  CANCELLED: { label: 'Cancelled', fg: '#666', bg: '#f0f0f0' },
-};
+import { ORDER_STATUS } from '@/lib/order-status';
+import { useThemeColors } from '@/lib/theme';
 
 function relativeDate(iso: string): string {
   const then = new Date(iso);
@@ -49,9 +44,33 @@ function relativeDate(iso: string): string {
   });
 }
 
+function OrdersSkeleton() {
+  return (
+    <View className="gap-3 p-4">
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} className="flex-row gap-3 rounded-xl border border-border p-3">
+          <Skeleton className="h-14 w-14 rounded-lg" />
+          <View className="flex-1 gap-2 py-1">
+            <View className="flex-row justify-between">
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-20 rounded-full" />
+            </View>
+            <Skeleton className="h-3 w-2/5" />
+            <View className="flex-row justify-between">
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-4 w-16" />
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function OrdersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const authStatus = useAuthStore((s) => s.state.status);
   const ordersQuery = useOrders();
 
@@ -60,56 +79,52 @@ export default function OrdersScreen() {
   const renderBody = () => {
     if (authStatus === 'guest') {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.stateTitle}>Sign in to see your orders</Text>
-          <Text style={styles.stateSubtitle}>
+        <View className="flex-1 items-center justify-center px-8">
+          <IconSymbol name="bag" size={72} color={colors.mutedForeground} />
+          <Text variant="title" className="mb-2 mt-6 text-center">
+            Sign in to see your orders
+          </Text>
+          <Text variant="body" className="mb-6 text-center text-muted-foreground">
             Your order history lives in your YIIVA account
           </Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.push('/auth/login')}
-          >
-            <Text style={styles.primaryButtonText}>Sign In</Text>
-          </TouchableOpacity>
+          <Button variant="brand" className="px-10" onPress={() => router.push('/auth/login')}>
+            Sign In
+          </Button>
         </View>
       );
     }
 
     if (ordersQuery.isPending || authStatus === 'loading') {
-      return (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#333" />
-        </View>
-      );
+      return <OrdersSkeleton />;
     }
 
     if (ordersQuery.isError) {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.stateTitle}>Couldn&apos;t load your orders</Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => ordersQuery.refetch()}
-          >
-            <Text style={styles.primaryButtonText}>Retry</Text>
-          </TouchableOpacity>
+        <View className="flex-1 items-center justify-center gap-4 px-8">
+          <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
+          <Text variant="title" className="text-center">
+            Couldn&apos;t load your orders
+          </Text>
+          <Button variant="brand" className="px-10" onPress={() => ordersQuery.refetch()}>
+            Retry
+          </Button>
         </View>
       );
     }
 
     if (orders.length === 0) {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.stateTitle}>No orders yet</Text>
-          <Text style={styles.stateSubtitle}>
+        <View className="flex-1 items-center justify-center px-8">
+          <IconSymbol name="bag" size={72} color={colors.mutedForeground} />
+          <Text variant="title" className="mb-2 mt-6 text-center">
+            No orders yet
+          </Text>
+          <Text variant="body" className="mb-6 text-center text-muted-foreground">
             When you check out, your orders will appear here.
           </Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.replace('/(tabs)')}
-          >
-            <Text style={styles.primaryButtonText}>Start shopping</Text>
-          </TouchableOpacity>
+          <Button variant="brand" className="px-10" onPress={() => router.replace('/(tabs)')}>
+            Start shopping
+          </Button>
         </View>
       );
     }
@@ -124,6 +139,7 @@ export default function OrdersScreen() {
           <RefreshControl
             refreshing={ordersQuery.isRefetching && !ordersQuery.isFetchingNextPage}
             onRefresh={() => ordersQuery.refetch()}
+            tintColor={colors.mutedForeground}
           />
         }
         onEndReachedThreshold={0.4}
@@ -134,7 +150,7 @@ export default function OrdersScreen() {
         }}
         ListFooterComponent={
           ordersQuery.isFetchingNextPage ? (
-            <ActivityIndicator color="#333" style={{ marginVertical: 16 }} />
+            <ActivityIndicator color={colors.mutedForeground} style={{ marginVertical: 16 }} />
           ) : null
         }
         renderItem={({ item }) => (
@@ -150,17 +166,19 @@ export default function OrdersScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>←</Text>
+      <View
+        className="flex-row items-center justify-between border-b border-border px-5 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
+        <TouchableOpacity onPress={() => router.back()} className="p-2">
+          <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My orders</Text>
-        <View style={styles.headerSpacer} />
+        <Text variant="heading">My orders</Text>
+        <View className="w-10" />
       </View>
 
       {renderBody()}
@@ -175,7 +193,7 @@ function OrderCard({
   order: OrderListItem;
   onPress: () => void;
 }) {
-  const meta = STATUS_META[order.status];
+  const meta = ORDER_STATUS[order.status];
   const thumb = imageSource(order.image);
   const store =
     order.storeCount > 1
@@ -183,171 +201,41 @@ function OrderCard({
       : order.storeName;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.thumb}>
-        {thumb ? (
-          <Image source={thumb} style={styles.thumbImage} contentFit="cover" />
-        ) : (
-          <View style={[styles.thumbImage, styles.thumbPlaceholder]} />
-        )}
-      </View>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} className="mb-3">
+      <Card className="flex-row gap-3 p-3">
+        <View className="h-14 w-14 overflow-hidden rounded-lg bg-muted">
+          {thumb ? (
+            <Image
+              source={thumb}
+              style={{ width: 56, height: 56 }}
+              contentFit="cover"
+            />
+          ) : (
+            <View className="h-14 w-14 bg-muted" />
+          )}
+        </View>
 
-      <View style={styles.cardBody}>
-        <View style={styles.cardTopRow}>
-          <Text style={styles.storeName} numberOfLines={1}>
-            {store}
+        <View className="flex-1 justify-center">
+          <View className="flex-row items-center justify-between gap-2">
+            <Text variant="label" numberOfLines={1} className="flex-1">
+              {store}
+            </Text>
+            <Badge tone={meta.tone}>{meta.label}</Badge>
+          </View>
+
+          <Text variant="caption" className="mt-0.5">
+            Order #{order.orderNumber}
           </Text>
-          <View style={[styles.statusChip, { backgroundColor: meta.bg }]}>
-            <Text style={[styles.statusChipText, { color: meta.fg }]}>{meta.label}</Text>
+
+          <View className="mt-1.5 flex-row items-end justify-between gap-2">
+            <Text variant="caption" className="flex-1">
+              {order.itemCount} {order.itemCount === 1 ? 'item' : 'items'} ·{' '}
+              {relativeDate(order.placedAt)}
+            </Text>
+            <Text variant="label">{formatZAR(order.total)}</Text>
           </View>
         </View>
-
-        <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
-
-        <View style={styles.cardBottomRow}>
-          <Text style={styles.metaText}>
-            {order.itemCount} {order.itemCount === 1 ? 'item' : 'items'} ·{' '}
-            {relativeDate(order.placedAt)}
-          </Text>
-          <Text style={styles.total}>{formatZAR(order.total)}</Text>
-        </View>
-      </View>
+      </Card>
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  backText: {
-    fontSize: 26,
-    color: '#000',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  headerSpacer: {
-    width: 40,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  stateTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  stateSubtitle: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  card: {
-    flexDirection: 'row',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
-  thumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#f5f5f5',
-  },
-  thumbImage: {
-    width: 56,
-    height: 56,
-  },
-  thumbPlaceholder: {
-    backgroundColor: '#f0f0f0',
-  },
-  cardBody: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  cardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  storeName: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#000',
-  },
-  statusChip: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  statusChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  orderNumber: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 2,
-  },
-  cardBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginTop: 6,
-    gap: 8,
-  },
-  metaText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#666',
-  },
-  total: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#000',
-  },
-});

@@ -2,14 +2,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
-  Text,
-  StyleSheet,
   TextInput,
   TouchableOpacity,
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  StatusBar,
   ActivityIndicator,
   Alert,
 } from 'react-native';
@@ -17,6 +14,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Text } from '@/components/ui/text';
+import { Avatar } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { useThemeColors } from '@/lib/theme';
 import { imageSource } from '@/lib/image-source';
 import { useAuthStore } from '@/lib/auth-store';
 import {
@@ -43,6 +45,7 @@ export default function ChatScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const flatListRef = useRef<FlatList>(null);
 
   // Route param is named artistId for historical reasons; value = merchant
@@ -218,15 +221,20 @@ export default function ChatScreen() {
 
     return (
       <View
-        style={[
-          styles.messageContainer,
-          isUser ? styles.userMessageContainer : styles.artistMessageContainer,
-        ]}
+        className={`mb-4 flex-row items-end ${isUser ? 'justify-end' : 'justify-start'}`}
       >
         {!isUser && logoSource && (
-          <Image source={logoSource} style={styles.messageAvatar} contentFit="cover" />
+          <Image
+            source={logoSource}
+            style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }}
+            contentFit="cover"
+          />
         )}
-        <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.artistBubble]}>
+        <View
+          className={`max-w-[70%] rounded-[20px] px-4 py-2.5 ${
+            isUser ? 'bg-brand rounded-br-md' : 'bg-muted rounded-bl-md'
+          }`}
+        >
           {item.attachments.map((attachment, index) => {
             const aspect =
               attachment.width && attachment.height
@@ -236,19 +244,32 @@ export default function ChatScreen() {
               <Image
                 key={`${item.id}-att-${index}`}
                 source={{ uri: attachment.thumbnailUrl ?? attachment.url }}
-                style={[styles.messageImage, { aspectRatio: Math.min(Math.max(aspect, 0.5), 2) }]}
+                style={{
+                  width: 200,
+                  borderRadius: 12,
+                  marginTop: 2,
+                  marginBottom: 6,
+                  backgroundColor: colors.muted,
+                  aspectRatio: Math.min(Math.max(aspect, 0.5), 2),
+                }}
                 contentFit="cover"
               />
             );
           })}
           {!!item.text && (
             <Text
-              style={[styles.messageText, isUser ? styles.userMessageText : styles.artistMessageText]}
+              variant="body"
+              className={isUser ? 'text-brand-foreground' : 'text-foreground'}
             >
               {item.text}
             </Text>
           )}
-          <Text style={[styles.messageTime, isUser ? styles.userMessageTime : styles.artistMessageTime]}>
+          <Text
+            variant="micro"
+            className={`mt-1 ${
+              isUser ? 'text-right text-brand-foreground' : 'text-muted-foreground'
+            }`}
+          >
             {formatTime(item.createdAt)}
           </Text>
         </View>
@@ -260,25 +281,29 @@ export default function ChatScreen() {
 
   if (authStatus !== 'authenticated') {
     return (
-      <View style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.stateContainer, { paddingTop: insets.top }]}>
+        <View
+          className="flex-1 items-center justify-center gap-4 px-10"
+          style={{ paddingTop: insets.top }}
+        >
           {authStatus === 'loading' ? (
-            <ActivityIndicator size="large" color="#333" />
+            <ActivityIndicator size="large" color={colors.mutedForeground} />
           ) : (
             <>
-              <Text style={styles.stateTitle}>Sign in to chat</Text>
-              <Text style={styles.stateText}>
+              <Text variant="title" className="text-center">
+                Sign in to chat
+              </Text>
+              <Text variant="body" className="text-center text-muted-foreground">
                 Message brands directly from your YIIVA account.
               </Text>
-              <TouchableOpacity
-                style={styles.stateButton}
-                onPress={() => router.push('/auth/login')}
-              >
-                <Text style={styles.stateButtonText}>Sign In</Text>
-              </TouchableOpacity>
+              <Button className="rounded-full px-10" onPress={() => router.push('/auth/login')}>
+                Sign In
+              </Button>
               <TouchableOpacity onPress={() => router.back()}>
-                <Text style={styles.stateBackLink}>Go back</Text>
+                <Text variant="caption" className="underline">
+                  Go back
+                </Text>
               </TouchableOpacity>
             </>
           )}
@@ -289,10 +314,13 @@ export default function ChatScreen() {
 
   if (conversationQuery.isPending) {
     return (
-      <View style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.stateContainer, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color="#333" />
+        <View
+          className="flex-1 items-center justify-center gap-4 px-10"
+          style={{ paddingTop: insets.top }}
+        >
+          <ActivityIndicator size="large" color={colors.mutedForeground} />
         </View>
       </View>
     );
@@ -303,20 +331,23 @@ export default function ChatScreen() {
       conversationQuery.error instanceof APIError &&
       conversationQuery.error.status === 404;
     return (
-      <View style={styles.container}>
+      <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.stateContainer, { paddingTop: insets.top }]}>
-          <Text style={styles.stateTitle}>
+        <View
+          className="flex-1 items-center justify-center gap-4 px-10"
+          style={{ paddingTop: insets.top }}
+        >
+          <Text variant="title" className="text-center">
             {notFound ? 'Brand not found' : "Couldn't open the chat"}
           </Text>
-          <TouchableOpacity
-            style={styles.stateButton}
+          <Button
+            className="rounded-full px-10"
             onPress={() =>
               notFound ? router.back() : conversationQuery.refetch()
             }
           >
-            <Text style={styles.stateButtonText}>{notFound ? 'Go back' : 'Retry'}</Text>
-          </TouchableOpacity>
+            {notFound ? 'Go back' : 'Retry'}
+          </Button>
         </View>
       </View>
     );
@@ -325,23 +356,27 @@ export default function ChatScreen() {
   const merchant = conversation.merchant;
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol name="chevron.left" size={24} color="#000" />
+      <View
+        className="flex-row items-center border-b border-border bg-card px-4 pb-3"
+        style={{ paddingTop: insets.top + 12 }}
+      >
+        <TouchableOpacity onPress={() => router.back()} className="mr-2 p-2">
+          <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
 
-        <View style={styles.headerContent}>
-          {logoSource && (
-            <Image source={logoSource} style={styles.headerAvatar} contentFit="cover" />
-          )}
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>{merchant.displayName}</Text>
-            <Text style={styles.headerSubtitle}>
+        <View className="flex-1 flex-row items-center gap-3">
+          <Avatar
+            uri={merchant.logo}
+            fallback={merchant.displayName?.charAt(0)}
+            size={36}
+          />
+          <View className="flex-1">
+            <Text variant="heading">{merchant.displayName}</Text>
+            <Text variant="caption" className="mt-0.5">
               {merchant.avgResponseTime
                 ? `Usually responds within ${merchant.avgResponseTime}`
                 : merchant.isVerified
@@ -352,17 +387,20 @@ export default function ChatScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.headerAction}
+          className="p-2"
           onPress={() => router.push(`/artist/${merchant.username}`)}
         >
-          <IconSymbol name="info.circle" size={24} color="#000" />
+          <IconSymbol name="info.circle" size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
       {/* Messages List */}
       {historyLoading ? (
-        <View style={styles.historyLoading}>
-          <ActivityIndicator size="small" color="#333" />
+        <View className="flex-1 gap-4 px-4 py-4">
+          <Skeleton className="h-10 w-1/2 self-start rounded-[20px] rounded-bl-md" />
+          <Skeleton className="h-16 w-3/5 self-end rounded-[20px] rounded-br-md" />
+          <Skeleton className="h-10 w-2/5 self-start rounded-[20px] rounded-bl-md" />
+          <Skeleton className="h-12 w-1/2 self-end rounded-[20px] rounded-br-md" />
         </View>
       ) : (
         <FlatList
@@ -370,13 +408,13 @@ export default function ChatScreen() {
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Text style={styles.emptyChatText}>
+            <View className="items-center px-10 pt-20">
+              <Text variant="caption" className="text-center">
                 Say hi to {merchant.displayName} — ask about sizing, stock or
                 your order.
               </Text>
@@ -390,44 +428,47 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
+        <View
+          className="border-t border-border bg-card px-4 pt-2"
+          style={{ paddingBottom: insets.bottom + 8 }}
+        >
           {pendingAttachment && (
-            <View style={styles.pendingAttachment}>
+            <View className="mb-2 ml-10 self-start">
               <Image
                 source={{ uri: pendingAttachment.localUri }}
-                style={styles.pendingAttachmentImage}
+                style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: colors.muted }}
                 contentFit="cover"
               />
               {pendingAttachment.status === 'uploading' && (
-                <View style={styles.pendingAttachmentOverlay}>
+                <View className="absolute inset-0 items-center justify-center rounded-[10px] bg-black/35">
                   <ActivityIndicator size="small" color="#fff" />
                 </View>
               )}
               <TouchableOpacity
-                style={styles.pendingAttachmentRemove}
+                className="absolute -right-2 -top-2 rounded-full bg-card"
                 onPress={() => setPendingAttachment(null)}
               >
-                <IconSymbol name="xmark.circle.fill" size={22} color="#333" />
+                <IconSymbol name="xmark.circle.fill" size={22} color={colors.foreground} />
               </TouchableOpacity>
             </View>
           )}
-          <View style={styles.inputWrapper}>
+          <View className="flex-row items-end gap-2">
             <TouchableOpacity
-              style={styles.attachButton}
+              className="mb-1 p-1"
               onPress={handleAttach}
               disabled={!!pendingAttachment}
             >
               <IconSymbol
                 name="plus.circle.fill"
                 size={28}
-                color={pendingAttachment ? '#ccc' : '#007AFF'}
+                color={pendingAttachment ? colors.mutedForeground : colors.brand}
               />
             </TouchableOpacity>
 
             <TextInput
-              style={styles.input}
+              className="max-h-[100px] min-h-[40px] flex-1 rounded-[20px] bg-muted px-4 py-2 text-[15px] text-foreground"
               placeholder={`Message ${merchant.displayName}...`}
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.mutedForeground}
               value={inputText}
               onChangeText={setInputText}
               multiline
@@ -440,14 +481,16 @@ export default function ChatScreen() {
             />
 
             <TouchableOpacity
-              style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
+              className={`mb-0.5 h-9 w-9 items-center justify-center rounded-full ${
+                canSend ? 'bg-brand' : 'bg-muted'
+              }`}
               onPress={handleSend}
               disabled={!canSend}
             >
               <IconSymbol
-                name="arrow.up.circle.fill"
-                size={32}
-                color={canSend ? '#007AFF' : '#ccc'}
+                name="arrow.up"
+                size={18}
+                color={canSend ? colors.brandForeground : colors.mutedForeground}
               />
             </TouchableOpacity>
           </View>
@@ -456,223 +499,3 @@ export default function ChatScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  stateContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  stateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-  },
-  stateText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  stateButton: {
-    backgroundColor: '#000',
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 24,
-  },
-  stateButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  stateBackLink: {
-    fontSize: 14,
-    color: '#666',
-    textDecorationLine: 'underline',
-  },
-  historyLoading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyChat: {
-    paddingTop: 80,
-    paddingHorizontal: 40,
-    alignItems: 'center',
-  },
-  emptyChatText: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  headerAction: {
-    padding: 8,
-  },
-  messagesList: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  messageContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    alignItems: 'flex-end',
-  },
-  userMessageContainer: {
-    justifyContent: 'flex-end',
-  },
-  artistMessageContainer: {
-    justifyContent: 'flex-start',
-  },
-  messageAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginRight: 8,
-  },
-  messageBubble: {
-    maxWidth: '70%',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  messageImage: {
-    width: 200,
-    borderRadius: 12,
-    marginTop: 2,
-    marginBottom: 6,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  pendingAttachment: {
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-    marginLeft: 40,
-  },
-  pendingAttachmentImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    backgroundColor: '#f0f0f0',
-  },
-  pendingAttachmentOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pendingAttachmentRemove: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#fff',
-    borderRadius: 11,
-  },
-  userBubble: {
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
-  },
-  artistBubble: {
-    backgroundColor: '#f0f0f0',
-    borderBottomLeftRadius: 4,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  userMessageText: {
-    color: '#fff',
-  },
-  artistMessageText: {
-    color: '#000',
-  },
-  messageTime: {
-    fontSize: 11,
-    marginTop: 4,
-  },
-  userMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
-  },
-  artistMessageTime: {
-    color: '#999',
-  },
-  inputContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  attachButton: {
-    padding: 4,
-    marginBottom: 4,
-  },
-  input: {
-    flex: 1,
-    minHeight: 36,
-    maxHeight: 100,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 18,
-    fontSize: 15,
-    color: '#000',
-  },
-  sendButton: {
-    padding: 4,
-    marginBottom: 2,
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-});

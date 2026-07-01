@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { ThemedText } from './ThemedText';
-import { ThemedView } from './ThemedView';
+import { FlatList, TouchableOpacity, View } from 'react-native';
+import { Text } from './ui/text';
+import { useThemeColors } from '@/lib/theme';
 
 interface Product {
   id: string;
@@ -19,123 +19,53 @@ interface RowProductListProps {
   onSeeAll?: () => void;
 }
 
+// YIIVA redesign — token-driven horizontal rail (New Arrivals etc.).
 export function RowProductList({ title, products, onSeeAll }: RowProductListProps) {
   const router = useRouter();
+  const colors = useThemeColors();
 
-  const handleProductPress = (productId: string) => {
-    router.push(`/product/${productId}`);
-  };
-
+  const handleProductPress = (productId: string) => router.push(`/product/${productId}`);
   const handleArtistPress = (artistName: string) => {
     const artistId = artistName.toLowerCase().replace(/\s+/g, '-');
     router.push(`/artist/${artistId}`);
   };
 
   const renderProduct = ({ item }: { item: Product }) => (
-    <TouchableOpacity 
-      style={styles.productCard} 
-      onPress={() => handleProductPress(item.id)}
-      activeOpacity={0.8}
-    >
-      <Image source={item.image} style={styles.productImage} />
-      <View style={styles.productInfo}>
-        <ThemedText style={styles.productTitle} numberOfLines={2}>
+    <TouchableOpacity className="w-40" onPress={() => handleProductPress(item.id)} activeOpacity={0.8}>
+      <Image
+        source={item.image}
+        style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 8, backgroundColor: colors.muted }}
+      />
+      <View className="gap-1 px-1">
+        <Text className="text-[13px] font-semibold leading-4 text-foreground" numberOfLines={2}>
           {item.title}
-        </ThemedText>
+        </Text>
         <TouchableOpacity onPress={() => handleArtistPress(item.artistName)}>
-          <ThemedText style={styles.artistName}>By {item.artistName}</ThemedText>
+          <Text className="text-[11px] italic text-muted-foreground">By {item.artistName}</Text>
         </TouchableOpacity>
-        <ThemedText style={styles.price}>{item.price}</ThemedText>
+        <Text className="text-[14px] font-semibold text-foreground">{item.price}</Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <ThemedView style={styles.container}>
-      {/* Header with title and See All */}
-      <View style={styles.header}>
-        <ThemedText style={styles.sectionTitle}>{title.toUpperCase()}</ThemedText>
+    <View className="bg-card py-5">
+      <View className="mb-4 flex-row items-center justify-between px-4">
+        <Text className="text-[16px] font-bold tracking-wide text-foreground">{title.toUpperCase()}</Text>
         <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7}>
-          <ThemedText style={styles.seeAllText}>See All</ThemedText>
+          <Text className="text-[14px] font-medium text-brand">See All</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Horizontal product list */}
       <FlatList
         data={products}
         renderItem={renderProduct}
         keyExtractor={(item) => item.id}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
+        ItemSeparatorComponent={() => <View className="w-3" />}
       />
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#fff',
-    paddingVertical: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    letterSpacing: 0.5,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000',
-    textDecorationLine: 'underline',
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-  },
-  separator: {
-    width: 12,
-  },
-  productCard: {
-    width: 160,
-    backgroundColor: '#fff',
-  },
-  productImage: {
-    width: '100%',
-    height: 180,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  productInfo: {
-    paddingHorizontal: 4,
-  },
-  productTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-    lineHeight: 16,
-  },
-  artistName: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: '#666',
-    marginBottom: 4,
-    fontStyle: 'italic',
-  },
-  price: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-});

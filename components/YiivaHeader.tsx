@@ -1,9 +1,8 @@
 import React from 'react';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, Text as RNText, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ThemedText } from './ThemedText';
-import { ThemedView } from './ThemedView';
 import { IconSymbol } from './ui/IconSymbol';
+import { useThemeColors } from '@/lib/theme';
 
 interface YiivaHeaderProps {
   onMenuPress: () => void;
@@ -13,6 +12,8 @@ interface YiivaHeaderProps {
   unreadCount?: number;
 }
 
+// YIIVA redesign — token surface (bg-card), foreground-tinted logo (works in
+// dark since ICON_BLACK is monochrome), token bell badge.
 export function YiivaHeader({
   onMenuPress,
   onCartPress,
@@ -20,95 +21,46 @@ export function YiivaHeader({
   unreadCount = 0,
 }: YiivaHeaderProps) {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
 
   return (
-    <ThemedView style={[styles.container, { paddingTop: insets.top + 16 }]}>
-      <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
-        <View style={styles.menuIcon}>
-          <View style={styles.menuLine} />
-          <View style={styles.menuLine} />
-          <View style={styles.menuLine} />
+    <View
+      className="flex-row items-center justify-between border-b border-border bg-card px-5 pb-1.5"
+      style={{ paddingTop: insets.top + 16 }}
+    >
+      <TouchableOpacity onPress={onMenuPress} className="p-2">
+        <View className="gap-[3px]">
+          <View className="h-0.5 w-5 rounded-full bg-foreground" />
+          <View className="h-0.5 w-5 rounded-full bg-foreground" />
+          <View className="h-0.5 w-5 rounded-full bg-foreground" />
         </View>
       </TouchableOpacity>
-      
-      <Image 
-        source={require('@/assets/images/ICON_BLACK.png')} 
-        style={styles.logo} 
+
+      <Image
+        source={require('@/assets/images/ICON_BLACK.png')}
+        style={{ height: 32, width: 120 }}
         resizeMode="contain"
+        tintColor={colors.foreground}
       />
-      
-      <View style={styles.rightActions}>
-        <TouchableOpacity onPress={onNotificationsPress} style={styles.notificationsButton}>
-          <IconSymbol size={24} name="bell" color="#333" />
+
+      <View className="flex-row items-center gap-2">
+        <TouchableOpacity onPress={onNotificationsPress} className="p-2">
+          <IconSymbol size={24} name="bell" color={colors.foreground} />
           {unreadCount > 0 && (
-            <View style={styles.badge}>
-              <ThemedText style={styles.badgeText}>
+            <View className="absolute right-1 top-1 h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1">
+              <RNText
+                className="text-[10px] font-bold text-danger-foreground"
+                style={{ lineHeight: 14 }}
+              >
                 {unreadCount > 9 ? '9+' : unreadCount}
-              </ThemedText>
+              </RNText>
             </View>
           )}
         </TouchableOpacity>
-        <TouchableOpacity onPress={onCartPress} style={styles.cartButton}>
-          <IconSymbol size={24} name="cart" color="#333" />
+        <TouchableOpacity onPress={onCartPress} className="p-2">
+          <IconSymbol size={24} name="cart" color={colors.foreground} />
         </TouchableOpacity>
       </View>
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 6,
-    backgroundColor: '#fff',
-  },
-  menuButton: {
-    padding: 8,
-  },
-  menuIcon: {
-    gap: 3,
-  },
-  menuLine: {
-    width: 20,
-    height: 2,
-    backgroundColor: '#333',
-    borderRadius: 1,
-  },
-  logo: {
-    height: 32,
-    width: 120,
-  },
-  rightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  notificationsButton: {
-    padding: 8,
-  },
-  badge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#e53935',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  cartButton: {
-    padding: 8,
-  },
-});

@@ -3,21 +3,22 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
-  StatusBar,
-  StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotifications,
 } from '@/hooks/useNotificationQueries';
 import { useAuthStore } from '@/lib/auth-store';
-import type { AppNotification } from '@/lib/api-client';
+import { useThemeColors } from '@/lib/theme';
+import type { AppNotification, AppNotificationType } from '@/lib/api-client';
 
 function relativeTime(iso: string): string {
   const then = new Date(iso);
@@ -32,9 +33,26 @@ function relativeTime(iso: string): string {
   return then.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
 }
 
+// Notification type → SF Symbol. `accent` types tint brand; the rest stay muted.
+const ICON_FOR: Record<string, { name: string; accent?: boolean }> = {
+  ORDER_CONFIRMED: { name: 'checkmark.circle', accent: true },
+  PAYMENT_RECEIVED: { name: 'creditcard', accent: true },
+  ORDER_SHIPPED: { name: 'shippingbox' },
+  ORDER_DELIVERED: { name: 'checkmark.circle' },
+  ORDER_CANCELLED: { name: 'xmark.circle' },
+  PAYMENT_FAILED: { name: 'exclamationmark.triangle' },
+  PROMOTION: { name: 'tag' },
+  SYSTEM: { name: 'bell' },
+};
+
+function iconFor(type: AppNotificationType) {
+  return ICON_FOR[type as string] ?? { name: 'bell' };
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const authStatus = useAuthStore((s) => s.state.status);
   const query = useNotifications();
   const markRead = useMarkNotificationRead();
@@ -54,42 +72,52 @@ export default function NotificationsScreen() {
   const renderBody = () => {
     if (authStatus === 'guest') {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.stateTitle}>Sign in to see your notifications</Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.push('/auth/login')}
-          >
-            <Text style={styles.primaryButtonText}>Sign In</Text>
-          </TouchableOpacity>
+        <View className="flex-1 items-center justify-center px-8">
+          <IconSymbol name="bell" size={64} color={colors.mutedForeground} />
+          <Text variant="title" className="mb-6 mt-4 text-center">
+            Sign in to see your notifications
+          </Text>
+          <Button variant="brand" className="px-10" onPress={() => router.push('/auth/login')}>
+            Sign In
+          </Button>
         </View>
       );
     }
 
     if (query.isPending || authStatus === 'loading') {
       return (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#333" />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color={colors.mutedForeground} />
         </View>
       );
     }
 
     if (query.isError) {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.stateTitle}>Couldn&apos;t load notifications</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => query.refetch()}>
-            <Text style={styles.primaryButtonText}>Retry</Text>
-          </TouchableOpacity>
+        <View className="flex-1 items-center justify-center px-8">
+          <IconSymbol
+            name="exclamationmark.triangle"
+            size={64}
+            color={colors.mutedForeground}
+          />
+          <Text variant="title" className="mb-6 mt-4 text-center">
+            Couldn&apos;t load notifications
+          </Text>
+          <Button variant="brand" className="px-10" onPress={() => query.refetch()}>
+            Retry
+          </Button>
         </View>
       );
     }
 
     if (notifications.length === 0) {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.stateTitle}>No notifications yet</Text>
-          <Text style={styles.stateSubtitle}>
+        <View className="flex-1 items-center justify-center px-8">
+          <IconSymbol name="bell" size={64} color={colors.mutedForeground} />
+          <Text variant="title" className="mb-2 mt-4 text-center">
+            No notifications yet
+          </Text>
+          <Text variant="body" className="text-center text-muted-foreground">
             Order updates and confirmations will show up here.
           </Text>
         </View>
@@ -106,6 +134,7 @@ export default function NotificationsScreen() {
           <RefreshControl
             refreshing={query.isRefetching && !query.isFetchingNextPage}
             onRefresh={() => query.refetch()}
+            tintColor={colors.mutedForeground}
           />
         }
         onEndReachedThreshold={0.4}
@@ -114,47 +143,75 @@ export default function NotificationsScreen() {
         }}
         ListFooterComponent={
           query.isFetchingNextPage ? (
-            <ActivityIndicator color="#333" style={{ marginVertical: 16 }} />
+            <ActivityIndicator
+              color={colors.mutedForeground}
+              style={{ marginVertical: 16 }}
+            />
           ) : null
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.row, !item.isRead && styles.rowUnread]}
-            onPress={() => handlePress(item)}
-            activeOpacity={0.7}
-          >
-            {!item.isRead && <View style={styles.unreadDot} />}
-            <View style={styles.rowBody}>
-              <Text style={[styles.rowTitle, !item.isRead && styles.rowTitleUnread]}>
-                {item.title}
-              </Text>
-              <Text style={styles.rowText} numberOfLines={2}>
-                {item.body}
-              </Text>
-              <Text style={styles.rowTime}>{relativeTime(item.createdAt)}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const icon = iconFor(item.type);
+          return (
+            <TouchableOpacity
+              className={`flex-row gap-3 border-b border-border px-5 py-4 ${
+                !item.isRead ? 'bg-brand-subtle' : 'bg-background'
+              }`}
+              onPress={() => handlePress(item)}
+              activeOpacity={0.7}
+            >
+              {/* Type icon */}
+              <View className="mt-0.5 h-9 w-9 items-center justify-center rounded-full bg-muted">
+                <IconSymbol
+                  name={icon.name as any}
+                  size={18}
+                  color={icon.accent ? colors.brand : colors.mutedForeground}
+                />
+              </View>
+
+              <View className="flex-1">
+                <View className="flex-row items-center gap-2">
+                  {!item.isRead && <View className="h-2 w-2 rounded-full bg-brand" />}
+                  <Text
+                    variant="label"
+                    className={`flex-1 ${!item.isRead ? '' : 'font-normal text-muted-foreground'}`}
+                  >
+                    {item.title}
+                  </Text>
+                </View>
+                <Text variant="body" numberOfLines={2} className="mt-0.5 text-muted-foreground">
+                  {item.body}
+                </Text>
+                <Text variant="caption" className="mt-1.5">
+                  {relativeTime(item.createdAt)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
       />
     );
   };
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>←</Text>
+      <View
+        className="flex-row items-center justify-between border-b border-border bg-background px-5 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
+        <TouchableOpacity onPress={() => router.back()} className="w-14 py-1">
+          <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text variant="heading">Notifications</Text>
         {authStatus === 'authenticated' && unreadCount > 0 ? (
-          <TouchableOpacity onPress={() => markAll.mutate()}>
-            <Text style={styles.markAll}>Read all</Text>
+          <TouchableOpacity onPress={() => markAll.mutate()} className="w-14">
+            <Text variant="caption" className="text-right text-brand">
+              Read all
+            </Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.headerSpacer} />
+          <View className="w-14" />
         )}
       </View>
 
@@ -162,65 +219,3 @@ export default function NotificationsScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  backButton: { width: 56, height: 40, justifyContent: 'center' },
-  backText: { fontSize: 26, color: '#000' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#000' },
-  headerSpacer: { width: 56 },
-  markAll: { width: 56, fontSize: 14, color: '#666', textAlign: 'right' },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  stateTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  stateSubtitle: { fontSize: 15, color: '#666', textAlign: 'center', marginBottom: 24 },
-  primaryButton: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    alignItems: 'center',
-  },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  row: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
-    gap: 10,
-  },
-  rowUnread: { backgroundColor: '#fafafe' },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#1a73e8',
-    marginTop: 6,
-  },
-  rowBody: { flex: 1 },
-  rowTitle: { fontSize: 15, color: '#222', marginBottom: 3 },
-  rowTitleUnread: { fontWeight: '700', color: '#000' },
-  rowText: { fontSize: 14, color: '#666', lineHeight: 19 },
-  rowTime: { fontSize: 12, color: '#aaa', marginTop: 6 },
-});

@@ -141,6 +141,17 @@ Each `screens/<n>-<name>/` has:
 - Merchant brand list (`profile.tsx:51-87`) references **a misspelled path with a leading space** (`' masonwabe_profile_pic.png'`) repeated across most entries.
 - `chat-store.ts` is not loaded in `_layout.tsx` — chats will reset on app restart even in the prototype.
 - `app.json` enables `NSAllowsArbitraryLoads` + `usesCleartextTraffic` — fine for dev, **must be removed before store submission.**
+- **`expo-video` `VideoView` renders BLACK / zero-sized with `StyleSheet.absoluteFill`** — give it **explicit `width/height: '100%'`** (see the artist/product screens and `ReelCard`/`reels.tsx`). This cost a long debug.
+- **`expo-video` won't play a bare `require()`'d asset number** in Expo Go, AND `Asset.fromModule(mod).uri` (a Metro dev-server URL) doesn't stream reliably on the iOS Simulator either — `.localUri` is null until `downloadAsync()`. Lesson from the reels work: **prefer remote Cloudinary `{uri}` over bundled video assets.** The reels were rebuilt onto `imageSource(url)` (Cloudinary, `vc_h264`) exactly because the bundled-asset path rendered black. Note: `expo-image` *does* accept require numbers; `expo-video` does not. Also `@/`-aliased `require()` doesn't register assets (no babel module-resolver) — use **relative** paths for asset requires.
+- **Adding/removing bundled assets needs a full Metro restart** (`expo start -c`); Fast Refresh won't re-register the asset map.
+- Push-notification **delivery** can't be tested in Expo Go / the iOS Simulator (no APNs) — emails + the in-app inbox cover it; push needs a dev build on a physical device.
+
+### New screens (2026-06 mobile build)
+
+- `app/account.tsx` — signed-in hub (profile + view-only addresses + sign out), reached from the SideMenu "Account" item.
+- `app/orders.tsx` — "My Orders" list (`GET /api/orders`, consolidated PaymentGroups); tap → `track-order`.
+- `app/notifications.tsx` — in-app inbox (`GET /api/me/notifications`); bell + unread badge in `YiivaHeader`; tap deep-links to the order. Push registration in `lib/push.ts`.
+- `app/reels.tsx` + `components/ReelsGrid.tsx`/`ReelCard.tsx` + `lib/reels-fixtures.ts` — Search "Discover" reels grid → full-screen product-reel feed. Static fixtures = the 10 `yiiva_demo` products that own a Cloudinary video (real productId/price/desc/logo); each `video` is a Cloudinary URL played via `imageSource()`. Dynamic backend feed (serving these same product videos) is the next phase.
 
 ### Skills / commands
 

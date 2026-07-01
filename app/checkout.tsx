@@ -6,17 +6,16 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StatusBar,
-  StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Text } from '@/components/ui/text';
 import { useCart } from '@/hooks/useCartQueries';
 import {
   useAddresses,
@@ -29,6 +28,8 @@ import { APIError, type Address } from '@/lib/api-client';
 import { setPaymentSession } from '@/lib/payment-session';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
+import { useThemeColors } from '@/lib/theme';
+import { cn } from '@/lib/utils';
 
 const SA_PROVINCES = [
   'Eastern Cape',
@@ -62,6 +63,7 @@ const EMPTY_ADDRESS_FORM = {
 export default function CheckoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const authStatus = useAuthStore((s) => s.state.status);
 
   const cartQuery = useCart();
@@ -188,153 +190,158 @@ export default function CheckoutScreen() {
       animationType="slide"
       onRequestClose={() => setAddressModalVisible(false)}
     >
-      <View style={styles.modalOverlay}>
+      <View className="flex-1 justify-end">
         <Pressable
-          style={styles.modalBackdrop}
+          className="absolute inset-0 bg-black/50"
           onPress={() => setAddressModalVisible(false)}
         />
-        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.modalHandle} />
-          <ThemedText style={styles.modalTitle}>
+        <View
+          className="max-h-[85%] rounded-t-[20px] bg-card px-5 pt-3"
+          style={{ paddingBottom: insets.bottom + 16 }}
+        >
+          <View className="mb-4 h-1 w-10 self-center rounded-full bg-border" />
+          <Text variant="heading" className="mb-4">
             {showAddressForm ? 'Add address' : 'Delivery address'}
-          </ThemedText>
+          </Text>
 
           {showAddressForm ? (
             <ScrollView keyboardShouldPersistTaps="handled">
               {formError && (
-                <ThemedText style={styles.formError}>{formError}</ThemedText>
+                <Text variant="caption" className="mb-3 text-danger">
+                  {formError}
+                </Text>
               )}
-              <TextInput
-                style={styles.formInput}
+              <Input
+                className="mb-3"
                 placeholder="Recipient name"
-                placeholderTextColor="#999"
+                error={!!formError}
                 value={addressForm.recipientName}
                 onChangeText={(v) => setAddressForm((s) => ({ ...s, recipientName: v }))}
               />
-              <TextInput
-                style={styles.formInput}
+              <Input
+                className="mb-3"
                 placeholder="Phone (e.g. 0821234567)"
-                placeholderTextColor="#999"
+                error={!!formError}
                 keyboardType="phone-pad"
                 value={addressForm.phone}
                 onChangeText={(v) => setAddressForm((s) => ({ ...s, phone: v }))}
               />
-              <TextInput
-                style={styles.formInput}
+              <Input
+                className="mb-3"
                 placeholder="Street address"
-                placeholderTextColor="#999"
+                error={!!formError}
                 value={addressForm.line1}
                 onChangeText={(v) => setAddressForm((s) => ({ ...s, line1: v }))}
               />
-              <TextInput
-                style={styles.formInput}
+              <Input
+                className="mb-3"
                 placeholder="Apartment, suite, etc. (optional)"
-                placeholderTextColor="#999"
                 value={addressForm.line2}
                 onChangeText={(v) => setAddressForm((s) => ({ ...s, line2: v }))}
               />
-              <TextInput
-                style={styles.formInput}
+              <Input
+                className="mb-3"
                 placeholder="City"
-                placeholderTextColor="#999"
+                error={!!formError}
                 value={addressForm.city}
                 onChangeText={(v) => setAddressForm((s) => ({ ...s, city: v }))}
               />
-              <View style={styles.provinceWrap}>
-                {SA_PROVINCES.map((province) => (
-                  <TouchableOpacity
-                    key={province}
-                    style={[
-                      styles.provinceChip,
-                      addressForm.province === province && styles.provinceChipActive,
-                    ]}
-                    onPress={() => setAddressForm((s) => ({ ...s, province }))}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.provinceChipText,
-                        addressForm.province === province && styles.provinceChipTextActive,
-                      ]}
+              <View className="mb-3 flex-row flex-wrap gap-2">
+                {SA_PROVINCES.map((province) => {
+                  const active = addressForm.province === province;
+                  return (
+                    <TouchableOpacity
+                      key={province}
+                      className={cn(
+                        'rounded-2xl border px-3.5 py-2',
+                        active ? 'border-brand bg-brand-subtle' : 'border-border bg-muted'
+                      )}
+                      onPress={() => setAddressForm((s) => ({ ...s, province }))}
                     >
-                      {province}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        variant="caption"
+                        className={active ? 'font-semibold text-brand' : ''}
+                      >
+                        {province}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <TextInput
-                style={styles.formInput}
+              <Input
+                className="mb-3"
                 placeholder="Postal code (4 digits)"
-                placeholderTextColor="#999"
+                error={!!formError}
                 keyboardType="number-pad"
                 maxLength={4}
                 value={addressForm.postalCode}
                 onChangeText={(v) => setAddressForm((s) => ({ ...s, postalCode: v }))}
               />
-              <TouchableOpacity
-                style={[
-                  styles.modalPrimaryButton,
-                  createAddressMutation.isPending && styles.modalPrimaryButtonDisabled,
-                ]}
+              <Button
+                variant="brand"
+                size="lg"
+                className="mb-3 mt-2"
+                loading={createAddressMutation.isPending}
                 onPress={handleSubmitAddress}
-                disabled={createAddressMutation.isPending}
               >
-                <ThemedText style={styles.modalPrimaryButtonText}>
-                  {createAddressMutation.isPending ? 'Saving…' : 'Save Address'}
-                </ThemedText>
-              </TouchableOpacity>
+                {createAddressMutation.isPending ? 'Saving…' : 'Save Address'}
+              </Button>
               {addresses.length > 0 && (
                 <TouchableOpacity onPress={() => setShowAddressForm(false)}>
-                  <ThemedText style={styles.modalLink}>Back to my addresses</ThemedText>
+                  <Text variant="caption" className="mb-2 text-center text-muted-foreground underline">
+                    Back to my addresses
+                  </Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
           ) : (
             <ScrollView>
-              {addresses.map((address: Address) => (
-                <TouchableOpacity
-                  key={address.id}
-                  style={[
-                    styles.addressOption,
-                    selectedAddressId === address.id && styles.addressOptionActive,
-                  ]}
-                  onPress={() => {
-                    setSelectedAddressId(address.id);
-                    setAddressModalVisible(false);
-                  }}
-                >
-                  <View style={styles.addressOptionBody}>
-                    <ThemedText style={styles.addressName}>
-                      {address.recipientName}
-                      {address.isDefault ? '  ·  Default' : ''}
-                    </ThemedText>
-                    <ThemedText style={styles.addressText}>
-                      {address.line1}
-                      {address.line2 ? `, ${address.line2}` : ''}
-                    </ThemedText>
-                    <ThemedText style={styles.addressText}>
-                      {address.city}, {address.postalCode}
-                    </ThemedText>
-                  </View>
-                  <View
-                    style={[
-                      styles.radioButton,
-                      selectedAddressId === address.id && styles.selectedRadioButton,
-                    ]}
-                  >
-                    {selectedAddressId === address.id && (
-                      <View style={styles.radioButtonInner} />
+              {addresses.map((address: Address) => {
+                const active = selectedAddressId === address.id;
+                return (
+                  <TouchableOpacity
+                    key={address.id}
+                    className={cn(
+                      'mb-3 flex-row items-center rounded-xl border-2 p-4',
+                      active ? 'border-brand bg-brand-subtle' : 'border-border bg-muted'
                     )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={styles.modalPrimaryButton}
+                    onPress={() => {
+                      setSelectedAddressId(address.id);
+                      setAddressModalVisible(false);
+                    }}
+                  >
+                    <View className="flex-1">
+                      <Text variant="label" className="mb-2">
+                        {address.recipientName}
+                        {address.isDefault ? '  ·  Default' : ''}
+                      </Text>
+                      <Text variant="caption">
+                        {address.line1}
+                        {address.line2 ? `, ${address.line2}` : ''}
+                      </Text>
+                      <Text variant="caption">
+                        {address.city}, {address.postalCode}
+                      </Text>
+                    </View>
+                    <View
+                      className={cn(
+                        'ml-3 h-5 w-5 items-center justify-center rounded-full border-2',
+                        active ? 'border-brand' : 'border-border'
+                      )}
+                    >
+                      {active && <View className="h-2.5 w-2.5 rounded-full bg-brand" />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <Button
+                variant="brand"
+                size="lg"
+                className="mb-3 mt-2"
                 onPress={() => setShowAddressForm(true)}
               >
-                <ThemedText style={styles.modalPrimaryButtonText}>
-                  Add New Address
-                </ThemedText>
-              </TouchableOpacity>
+                Add New Address
+              </Button>
             </ScrollView>
           )}
         </View>
@@ -343,67 +350,79 @@ export default function CheckoutScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       {renderAddressModal()}
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <IconSymbol name="chevron.left" size={24} color="#000" />
+      <View
+        className="flex-row items-center justify-between border-b border-border px-5 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
+        <TouchableOpacity onPress={handleBackPress} className="p-2">
+          <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Checkout</ThemedText>
-        <View style={styles.headerSpacer} />
+        <Text variant="heading">Checkout</Text>
+        <View className="w-10" />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Unavailable-items banner */}
         {hasUnavailable && (
-          <View style={styles.unavailableBanner}>
-            <ThemedText style={styles.unavailableBannerText}>
+          <View className="mx-5 mt-4 gap-2 rounded-[10px] bg-danger-subtle p-3.5">
+            <Text variant="body" className="text-danger">
               An item in your cart is no longer available. Remove it before
               placing your order.
-            </ThemedText>
+            </Text>
             <TouchableOpacity onPress={() => router.back()}>
-              <ThemedText style={styles.unavailableBannerLink}>Back to Cart</ThemedText>
+              <Text variant="label" className="text-danger underline">
+                Back to Cart
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Order Summary */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Order Summary</ThemedText>
+        <View className="border-b border-border px-5 py-5">
+          <Text variant="heading" className="mb-4">
+            Order Summary
+          </Text>
           {cartQuery.isPending ? (
-            <ActivityIndicator size="small" color="#333" />
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
           ) : (
             items.map((item) => {
               const imageAsset = imageSource(item.image);
               return (
-                <View key={item.id} style={styles.orderItem}>
+                <View key={item.id} className="mb-3 flex-row items-center gap-3">
                   {imageAsset ? (
-                    <Image source={imageAsset} style={styles.itemImage} contentFit="cover" />
+                    <Image
+                      source={imageAsset}
+                      style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
+                      contentFit="cover"
+                    />
                   ) : (
-                    <View style={styles.itemImagePlaceholder} />
+                    <View className="h-20 w-[60px] rounded-lg bg-muted" />
                   )}
-                  <View style={styles.itemDetails}>
-                    <ThemedText style={styles.itemTitle} numberOfLines={2}>
+                  <View className="flex-1">
+                    <Text variant="label" className="mb-1" numberOfLines={2}>
                       {item.name}
-                    </ThemedText>
-                    <ThemedText style={styles.itemBrand}>
+                    </Text>
+                    <Text variant="caption" className="mb-0.5 italic">
                       By {item.merchant.displayName}
-                    </ThemedText>
+                    </Text>
                     {item.size && (
-                      <ThemedText style={styles.itemSize}>Size: {item.size}</ThemedText>
+                      <Text variant="caption" className="mb-0.5">
+                        Size: {item.size}
+                      </Text>
                     )}
                     {item.quantity > 1 && (
-                      <ThemedText style={styles.itemQuantity}>Qty: {item.quantity}</ThemedText>
+                      <Text variant="caption" className="font-semibold">
+                        Qty: {item.quantity}
+                      </Text>
                     )}
                   </View>
-                  <ThemedText style={styles.itemPrice}>
-                    {formatZAR(item.lineTotal)}
-                  </ThemedText>
+                  <Text variant="label">{formatZAR(item.lineTotal)}</Text>
                 </View>
               );
             })
@@ -411,540 +430,157 @@ export default function CheckoutScreen() {
         </View>
 
         {/* Delivery Address */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>Delivery Address</ThemedText>
+        <View className="border-b border-border px-5 py-5">
+          <View className="flex-row items-center justify-between">
+            <Text variant="heading" className="mb-4">
+              Delivery Address
+            </Text>
             {addresses.length > 0 && (
               <TouchableOpacity onPress={() => { setShowAddressForm(false); setAddressModalVisible(true); }}>
-                <ThemedText style={styles.editButton}>Change</ThemedText>
+                <Text variant="label" className="text-brand">
+                  Change
+                </Text>
               </TouchableOpacity>
             )}
           </View>
 
           {addressesQuery.isPending ? (
-            <ActivityIndicator size="small" color="#333" />
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
           ) : selectedAddress ? (
-            <View style={styles.addressCard}>
-              <ThemedText style={styles.addressName}>
+            <View className="rounded-xl bg-muted p-4">
+              <Text variant="label" className="mb-2">
                 {selectedAddress.recipientName}
-              </ThemedText>
-              <ThemedText style={styles.addressText}>
+              </Text>
+              <Text variant="caption">
                 {selectedAddress.line1}
                 {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ''}
-              </ThemedText>
-              <ThemedText style={styles.addressText}>
+              </Text>
+              <Text variant="caption">
                 {selectedAddress.city}, {selectedAddress.postalCode}
-              </ThemedText>
-              <ThemedText style={styles.addressText}>
+              </Text>
+              <Text variant="caption">
                 {selectedAddress.province}, South Africa
-              </ThemedText>
-              <ThemedText style={styles.addressPhone}>{selectedAddress.phone}</ThemedText>
+              </Text>
+              <Text variant="caption" className="mt-1">
+                {selectedAddress.phone}
+              </Text>
             </View>
           ) : (
             <TouchableOpacity
-              style={styles.addAddressButton}
+              className="items-center rounded-xl border border-dashed border-border py-5"
               onPress={() => { setShowAddressForm(true); setAddressModalVisible(true); }}
             >
-              <ThemedText style={styles.addAddressButtonText}>
+              <Text variant="label" className="text-brand">
                 + Add a delivery address
-              </ThemedText>
+              </Text>
             </TouchableOpacity>
           )}
         </View>
 
         {/* Payment Method — PayFast redirect only in v1 */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Payment Method</ThemedText>
-          <View style={[styles.paymentOptionCard, styles.selectedPaymentOption]}>
-            <View style={styles.paymentOptionContent}>
-              <View style={styles.paymentOptionHeader}>
-                <View style={styles.paymentOptionIcon}>
-                  <IconSymbol name="creditcard" size={24} color="#000" />
+        <View className="border-b border-border px-5 py-5">
+          <Text variant="heading" className="mb-4">
+            Payment Method
+          </Text>
+          <Card className="overflow-hidden border-2 border-brand bg-brand-subtle">
+            <View className="p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-lg bg-card">
+                  <IconSymbol name="creditcard" size={24} color={colors.foreground} />
                 </View>
-                <View style={styles.paymentOptionInfo}>
-                  <ThemedText style={styles.paymentOptionTitle}>PayFast</ThemedText>
-                  <ThemedText style={styles.paymentOptionSubtitle}>
+                <View className="flex-1">
+                  <Text variant="label" className="mb-0.5">
+                    PayFast
+                  </Text>
+                  <Text variant="caption">
                     Card, Instant EFT and more — secure checkout
-                  </ThemedText>
+                  </Text>
                 </View>
-                <View style={[styles.radioButton, styles.selectedRadioButton]}>
-                  <View style={styles.radioButtonInner} />
+                <View className="ml-3 h-5 w-5 items-center justify-center rounded-full border-2 border-brand">
+                  <View className="h-2.5 w-2.5 rounded-full bg-brand" />
                 </View>
               </View>
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Order Total — server quote, VAT-inclusive */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Order Total</ThemedText>
+        <View className="border-b border-border px-5 py-5">
+          <Text variant="heading" className="mb-4">
+            Order Total
+          </Text>
           {!selectedAddress ? (
-            <ThemedText style={styles.quoteHint}>
+            <Text variant="caption" className="mb-2">
               Add a delivery address to see shipping and totals.
-            </ThemedText>
+            </Text>
           ) : quoteQuery.isPending ? (
-            <ActivityIndicator size="small" color="#333" />
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
           ) : quoteQuery.isError ? (
             <View>
-              <ThemedText style={styles.quoteHint}>
+              <Text variant="caption" className="mb-2">
                 {quoteQuery.error instanceof APIError
                   ? quoteQuery.error.message
                   : "Couldn't get shipping rates."}
-              </ThemedText>
+              </Text>
               <TouchableOpacity onPress={() => quoteQuery.refetch()}>
-                <ThemedText style={styles.editButton}>Retry</ThemedText>
+                <Text variant="label" className="text-brand">
+                  Retry
+                </Text>
               </TouchableOpacity>
             </View>
           ) : quote ? (
-            <View style={styles.totalBreakdown}>
-              <View style={styles.totalRow}>
-                <ThemedText style={styles.totalLabel}>Subtotal</ThemedText>
-                <ThemedText style={styles.totalValue}>{formatZAR(quote.subtotal)}</ThemedText>
+            <View className="gap-3">
+              <View className="flex-row items-center justify-between">
+                <Text variant="body" className="text-muted-foreground">Subtotal</Text>
+                <Text variant="body" className="font-medium">{formatZAR(quote.subtotal)}</Text>
               </View>
-              <View style={styles.totalRow}>
-                <ThemedText style={styles.totalLabel}>Shipping</ThemedText>
-                <ThemedText style={styles.totalValue}>{formatZAR(quote.shipping)}</ThemedText>
+              <View className="flex-row items-center justify-between">
+                <Text variant="body" className="text-muted-foreground">Shipping</Text>
+                <Text variant="body" className="font-medium">{formatZAR(quote.shipping)}</Text>
               </View>
-              <View style={styles.totalRow}>
-                <ThemedText style={styles.totalLabel}>VAT (included)</ThemedText>
-                <ThemedText style={styles.totalValue}>{formatZAR(quote.tax)}</ThemedText>
+              <View className="flex-row items-center justify-between">
+                <Text variant="body" className="text-muted-foreground">VAT (included)</Text>
+                <Text variant="body" className="font-medium">{formatZAR(quote.tax)}</Text>
               </View>
-              <View style={[styles.totalRow, styles.grandTotalRow]}>
-                <ThemedText style={styles.grandTotalLabel}>Total</ThemedText>
-                <ThemedText style={styles.grandTotalValue}>{formatZAR(quote.total)}</ThemedText>
+              <View className="mt-2 flex-row items-center justify-between border-t border-border pt-3">
+                <Text variant="heading">Total</Text>
+                <Text variant="heading">{formatZAR(quote.total)}</Text>
               </View>
             </View>
           ) : null}
         </View>
 
         {/* Bottom padding for fixed button */}
-        <View style={styles.bottomPadding} />
+        <View className="h-[100px]" />
       </ScrollView>
 
       {/* Fixed Place Order Button */}
-      <View style={[styles.fixedButtonSection, { paddingBottom: insets.bottom }]}>
-        <TouchableOpacity
-          style={[styles.placeOrderButton, !canPlaceOrder && styles.placeOrderButtonDisabled]}
-          onPress={handlePlaceOrder}
+      <View
+        className="absolute inset-x-0 bottom-0 bg-background px-5 pt-4"
+        style={{ paddingBottom: insets.bottom, ...FIXED_BAR_SHADOW }}
+      >
+        <Button
+          variant="brand"
+          size="lg"
+          loading={placeOrderMutation.isPending}
           disabled={!canPlaceOrder}
+          onPress={handlePlaceOrder}
         >
-          <ThemedText style={styles.placeOrderButtonText}>
-            {placeOrderMutation.isPending
-              ? 'PLACING ORDER…'
-              : quote
-                ? `PLACE ORDER - ${formatZAR(quote.total)}`
-                : 'PLACE ORDER'}
-          </ThemedText>
-        </TouchableOpacity>
+          {placeOrderMutation.isPending
+            ? 'PLACING ORDER…'
+            : quote
+              ? `PLACE ORDER - ${formatZAR(quote.total)}`
+              : 'PLACE ORDER'}
+        </Button>
       </View>
-    </ThemedView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  headerSpacer: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  unavailableBanner: {
-    backgroundColor: '#fdecec',
-    marginHorizontal: 20,
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 10,
-    gap: 8,
-  },
-  unavailableBannerText: {
-    color: '#b3261e',
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  unavailableBannerLink: {
-    color: '#b3261e',
-    fontSize: 14,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 16,
-  },
-  editButton: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
-  },
-  selectedRadioButton: {
-    borderColor: '#007AFF',
-  },
-  radioButtonInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#007AFF',
-  },
-  paymentOptionCard: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    overflow: 'hidden',
-  },
-  selectedPaymentOption: {
-    borderColor: '#007AFF',
-    backgroundColor: '#f0f8ff',
-  },
-  paymentOptionContent: {
-    padding: 16,
-  },
-  paymentOptionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  paymentOptionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  paymentOptionInfo: {
-    flex: 1,
-  },
-  paymentOptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 2,
-  },
-  paymentOptionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-  },
-  orderItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  itemImage: {
-    width: 60,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  itemImagePlaceholder: {
-    width: 60,
-    height: 80,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-  },
-  itemDetails: {
-    flex: 1,
-  },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  itemBrand: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    marginBottom: 2,
-  },
-  itemSize: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  itemQuantity: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '600',
-  },
-  itemPrice: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  addressCard: {
-    backgroundColor: '#f8f8f8',
-    padding: 16,
-    borderRadius: 12,
-  },
-  addressName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 8,
-  },
-  addressText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  addressPhone: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  addAddressButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  addAddressButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  quoteHint: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  totalBreakdown: {
-    gap: 12,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  totalLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  grandTotalRow: {
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    marginTop: 8,
-  },
-  grandTotalLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  grandTotalValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    fontFamily: 'Didot',
-  },
-  bottomPadding: {
-    height: 100,
-  },
-  fixedButtonSection: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  placeOrderButton: {
-    backgroundColor: '#000',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  placeOrderButtonDisabled: {
-    backgroundColor: '#999',
-  },
-  placeOrderButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  // Address modal
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    maxHeight: '85%',
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#ddd',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 16,
-  },
-  addressOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    padding: 16,
-    marginBottom: 12,
-  },
-  addressOptionActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#f0f8ff',
-  },
-  addressOptionBody: {
-    flex: 1,
-  },
-  formError: {
-    color: '#b3261e',
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  formInput: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#000',
-    marginBottom: 12,
-  },
-  provinceWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  provinceChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: '#f5f5f5',
-  },
-  provinceChipActive: {
-    backgroundColor: '#000',
-  },
-  provinceChipText: {
-    fontSize: 13,
-    color: '#666',
-  },
-  provinceChipTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  modalPrimaryButton: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  modalPrimaryButtonDisabled: {
-    backgroundColor: '#999',
-  },
-  modalPrimaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  modalLink: {
-    fontSize: 14,
-    color: '#666',
-    textDecorationLine: 'underline',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-});
+const FIXED_BAR_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -4 },
+  shadowOpacity: 0.15,
+  shadowRadius: 8,
+  elevation: 10,
+};

@@ -1,5 +1,8 @@
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Text } from '@/components/ui/text';
+import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { YiivaHeader } from '@/components/YiivaHeader';
 import { SideMenu } from '@/components/SideMenu';
 import { FeedTabs } from '@/components/FeedTabs';
@@ -7,15 +10,15 @@ import { useFilter } from '@/contexts/FilterContext';
 import { useCategories } from '@/hooks/useHomeQueries';
 import { useMerchantDirectory } from '@/hooks/useShopQueries';
 import { imageSource } from '@/lib/image-source';
+import { useThemeColors } from '@/lib/theme';
+import { cn } from '@/lib/utils';
 import type { DirectoryMerchant, GenderType } from '@/lib/api-client';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  StyleSheet,
   View,
-  StatusBar,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
@@ -29,6 +32,7 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const colors = useThemeColors();
   const { activePrimaryFilter } = useFilter();
   const [shopFilterMode, setShopFilterMode] = useState<'brands' | 'categories'>('brands');
   const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -104,61 +108,102 @@ export default function ProfileScreen() {
   });
   const loadedLetters = Object.keys(groupedBrands).sort();
 
-  const renderPlaceholder = (title: string, body: string) => (
-    <View style={styles.placeholderContainer}>
-      <ThemedText style={styles.placeholderTitle}>{title}</ThemedText>
-      <ThemedText style={styles.placeholderText}>{body}</ThemedText>
+  const renderPlaceholder = (
+    icon: React.ComponentProps<typeof IconSymbol>['name'],
+    title: string,
+    body: string
+  ) => (
+    <View className="flex-1 items-center justify-center gap-3 px-10 pt-20">
+      <IconSymbol name={icon} size={64} color={colors.mutedForeground} />
+      <Text variant="title" className="text-center">
+        {title}
+      </Text>
+      <Text variant="body" className="text-center text-muted-foreground">
+        {body}
+      </Text>
     </View>
   );
 
   const renderRetry = (message: string, onRetry: () => void) => (
-    <View style={styles.placeholderContainer}>
-      <ThemedText style={styles.placeholderTitle}>{message}</ThemedText>
-      <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-        <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
-      </TouchableOpacity>
+    <View className="flex-1 items-center justify-center gap-4 px-10 pt-20">
+      <IconSymbol name="exclamationmark.triangle" size={64} color={colors.mutedForeground} />
+      <Text variant="title" className="text-center">
+        {message}
+      </Text>
+      <Button variant="brand" className="px-10" onPress={onRetry}>
+        Retry
+      </Button>
+    </View>
+  );
+
+  const renderCategoriesSkeleton = () => (
+    <View className="gap-3 p-4">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <Skeleton key={i} className="h-[100px] w-full rounded-2xl" />
+      ))}
+    </View>
+  );
+
+  const renderBrandsSkeleton = () => (
+    <View className="flex-1 flex-row">
+      <View className="w-[30px] items-center gap-2 bg-muted py-4">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <Skeleton key={i} className="h-3 w-3 rounded-sm" />
+        ))}
+      </View>
+      <View className="flex-1 gap-4 px-5 py-4">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <View key={i} className="flex-row items-center gap-4">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <Skeleton className="h-4 flex-1 rounded-md" />
+          </View>
+        ))}
+      </View>
     </View>
   );
 
   const renderCategoriesView = () => {
     if (gender === null) {
       return renderPlaceholder(
+        'clock',
         'Coming soon',
         'Home & Lifestyle is on its way. Check back shortly.'
       );
     }
     if (categoriesQuery.isPending) {
-      return (
-        <View style={styles.placeholderContainer}>
-          <ActivityIndicator size="large" color="#333" />
-        </View>
-      );
+      return renderCategoriesSkeleton();
     }
     if (categoriesQuery.isError) {
       return renderRetry("Couldn't load categories", () => categoriesQuery.refetch());
     }
     if (categories.length === 0) {
-      return renderPlaceholder('No categories yet', 'Check back soon.');
+      return renderPlaceholder('square.grid.2x2', 'No categories yet', 'Check back soon.');
     }
 
     return (
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.categoriesContainer}>
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="p-4">
           {categories.map((category) => (
             <TouchableOpacity
               key={category.slug}
-              style={styles.categoryCard}
+              className="mb-3 overflow-hidden rounded-2xl bg-muted"
               onPress={() => handleCategoryPress(category.slug)}
               activeOpacity={0.9}
             >
-              <View style={styles.categoryContent}>
-                <ThemedText style={styles.categoryTitle}>
+              <View className="min-h-[100px] flex-row items-center justify-between px-6 py-6">
+                <Text variant="heading" className="flex-1 tracking-wide">
                   {category.displayName.toUpperCase()}
-                </ThemedText>
+                </Text>
                 {category.image && (
                   <Image
                     source={imageSource(category.image)}
-                    style={styles.categoryImage}
+                    style={{
+                      width: 80,
+                      height: 60,
+                      marginLeft: 16,
+                      borderRadius: 8,
+                      backgroundColor: colors.muted,
+                    }}
                     contentFit="cover"
                   />
                 )}
@@ -173,42 +218,46 @@ export default function ProfileScreen() {
   const renderBrandsView = () => {
     if (gender === null) {
       return renderPlaceholder(
+        'clock',
         'Coming soon',
         'Home & Lifestyle is on its way. Check back shortly.'
       );
     }
     if (directoryQuery.isPending) {
-      return (
-        <View style={styles.placeholderContainer}>
-          <ActivityIndicator size="large" color="#333" />
-        </View>
-      );
+      return renderBrandsSkeleton();
     }
     if (directoryQuery.isError) {
       return renderRetry("Couldn't load brands", () => directoryQuery.refetch());
     }
     if (brands.length === 0) {
-      return renderPlaceholder('No brands yet', 'New brands are joining YIIVA soon.');
+      return renderPlaceholder(
+        'bag',
+        'No brands yet',
+        'New brands are joining YIIVA soon.'
+      );
     }
 
     return (
-      <View style={styles.brandsContainer}>
-        {/* Alphabetical Index — letters without brands render greyed */}
-        <View style={styles.alphabetIndex}>
+      <View className="flex-1 flex-row">
+        {/* Alphabetical Index — letters without brands render dimmed */}
+        <View className="w-[30px] items-center bg-muted py-4">
           {ALPHABET.map((letter) => {
             const hasBrands = lettersWithBrands.has(letter);
             return (
               <TouchableOpacity
                 key={letter}
-                style={styles.alphabetItem}
+                className="min-h-6 items-center justify-center px-1 py-[3px]"
                 onPress={() => hasBrands && handleLetterPress(letter)}
                 disabled={!hasBrands}
               >
-                <ThemedText
-                  style={[styles.alphabetText, !hasBrands && styles.alphabetTextEmpty]}
+                <Text
+                  className={cn(
+                    'text-[12px]',
+                    hasBrands ? 'font-semibold text-brand' : 'text-muted-foreground'
+                  )}
                 >
                   {letter}
-                </ThemedText>
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -217,7 +266,7 @@ export default function ProfileScreen() {
         {/* Brands List */}
         <ScrollView
           ref={brandsScrollRef}
-          style={styles.brandsScrollView}
+          className="flex-1 bg-background"
           showsVerticalScrollIndicator={false}
           onScroll={handleBrandsScroll}
           scrollEventThrottle={16}
@@ -229,33 +278,37 @@ export default function ProfileScreen() {
                 sectionOffsets.current[letter] = e.nativeEvent.layout.y;
               }}
             >
-              <View style={styles.letterHeader}>
-                <ThemedText style={styles.letterHeaderText}>{letter}</ThemedText>
+              <View className="border-b border-border bg-muted px-5 py-2">
+                <Text variant="label" className="text-muted-foreground">
+                  {letter}
+                </Text>
               </View>
               {groupedBrands[letter].map((brand) => (
                 <TouchableOpacity
                   key={brand.id}
-                  style={styles.brandItem}
+                  className="flex-row items-center gap-4 border-b border-border bg-card px-5 py-4"
                   onPress={() => handleBrandPress(brand)}
                   activeOpacity={0.9}
                 >
-                  {brand.logo ? (
-                    <Image source={imageSource(brand.logo)} style={styles.brandLogo} />
-                  ) : (
-                    <View style={[styles.brandLogo, styles.brandLogoPlaceholder]}>
-                      <ThemedText style={styles.brandLogoInitial}>
-                        {brand.displayName.charAt(0).toUpperCase()}
-                      </ThemedText>
-                    </View>
-                  )}
-                  <ThemedText style={styles.brandName}>{brand.displayName}</ThemedText>
-                  <ThemedText style={styles.brandChevron}>›</ThemedText>
+                  <Avatar
+                    uri={brand.logo && brand.logo.startsWith('http') ? brand.logo : undefined}
+                    fallback={brand.displayName.charAt(0).toUpperCase()}
+                    size={40}
+                  />
+                  <Text variant="label" className="flex-1">
+                    {brand.displayName}
+                  </Text>
+                  <IconSymbol name="chevron.right" size={20} color={colors.mutedForeground} />
                 </TouchableOpacity>
               ))}
             </View>
           ))}
           {directoryQuery.isFetchingNextPage && (
-            <ActivityIndicator size="small" color="#333" style={styles.pagingSpinner} />
+            <ActivityIndicator
+              size="small"
+              color={colors.mutedForeground}
+              style={{ marginVertical: 16 }}
+            />
           )}
         </ScrollView>
       </View>
@@ -263,8 +316,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <View className="flex-1 bg-background">
       <SideMenu
         visible={isMenuVisible}
         onClose={() => setIsMenuVisible(false)}
@@ -280,247 +332,49 @@ export default function ProfileScreen() {
       <FeedTabs />
 
       {/* Shop Filter Toggle */}
-      <View style={styles.shopFilterContainer}>
-        <View style={styles.shopFilterToggle}>
+      <View className="mb-4 px-5">
+        <View className="flex-row rounded-lg bg-muted p-0.5">
           <TouchableOpacity
-            style={[
-              styles.shopFilterButton,
-              styles.leftButton,
-              shopFilterMode === 'brands' && styles.activeShopFilterButton
-            ]}
+            className={cn(
+              'flex-1 items-center justify-center rounded-md px-4 py-2.5',
+              shopFilterMode === 'brands' && 'bg-card'
+            )}
             onPress={() => handleShopFilterChange('brands')}
           >
-            <ThemedText style={[
-              styles.shopFilterText,
-              shopFilterMode === 'brands' && styles.activeShopFilterText
-            ]}>
+            <Text
+              className={cn(
+                'text-[15px]',
+                shopFilterMode === 'brands'
+                  ? 'font-semibold text-foreground'
+                  : 'font-medium text-muted-foreground'
+              )}
+            >
               Brands
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.shopFilterButton,
-              styles.rightButton,
-              shopFilterMode === 'categories' && styles.activeShopFilterButton
-            ]}
+            className={cn(
+              'flex-1 items-center justify-center rounded-md px-4 py-2.5',
+              shopFilterMode === 'categories' && 'bg-card'
+            )}
             onPress={() => handleShopFilterChange('categories')}
           >
-            <ThemedText style={[
-              styles.shopFilterText,
-              shopFilterMode === 'categories' && styles.activeShopFilterText
-            ]}>
+            <Text
+              className={cn(
+                'text-[15px]',
+                shopFilterMode === 'categories'
+                  ? 'font-semibold text-foreground'
+                  : 'font-medium text-muted-foreground'
+              )}
+            >
               Categories
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {shopFilterMode === 'categories' ? renderCategoriesView() : renderBrandsView()}
-    </ThemedView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  placeholderContainer: {
-    flex: 1,
-    alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 40,
-    gap: 12,
-  },
-  placeholderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  placeholderText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  retryButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 32,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 8,
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  pagingSpinner: {
-    marginVertical: 16,
-  },
-  shopFilterContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  shopFilterToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 2,
-    position: 'relative',
-  },
-  shopFilterButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 6,
-  },
-  leftButton: {
-    marginRight: 1,
-  },
-  rightButton: {
-    marginLeft: 1,
-  },
-  activeShopFilterButton: {
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  shopFilterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-  },
-  activeShopFilterText: {
-    color: '#333',
-    fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  categoriesContainer: {
-    padding: 16,
-  },
-  categoryCard: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 16,
-    marginBottom: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  categoryContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 24,
-    paddingHorizontal: 24,
-    minHeight: 100,
-  },
-  categoryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    flex: 1,
-    letterSpacing: 0.5,
-  },
-  categoryImage: {
-    width: 80,
-    height: 60,
-    marginLeft: 16,
-    borderRadius: 8,
-  },
-  brandsContainer: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  alphabetIndex: {
-    width: 30,
-    paddingVertical: 16,
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-  },
-  alphabetItem: {
-    paddingVertical: 3,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 24,
-  },
-  alphabetText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  alphabetTextEmpty: {
-    color: '#ccc',
-  },
-  brandsScrollView: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  letterHeader: {
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  letterHeaderText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#999',
-  },
-  brandItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  brandLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 16,
-    backgroundColor: '#f5f5f5',
-  },
-  brandLogoPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#e8e8e8',
-  },
-  brandLogoInitial: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#666',
-  },
-  brandName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  brandChevron: {
-    fontSize: 20,
-    color: '#ccc',
-    fontWeight: '300',
-  },
-});
