@@ -1,7 +1,6 @@
-import { MasonryGrid } from '@/components/MasonryGrid';
 import { ProductCard } from '@/components/ProductCard';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useBookmarks } from '@/hooks/useBookmarkQueries';
@@ -13,14 +12,13 @@ import { imageSource } from '@/lib/image-source';
 import { useThemeColors } from '@/lib/theme';
 import type { Bookmark } from '@/lib/api-client';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ActivityIndicator,
   NativeScrollEvent,
   NativeSyntheticEvent,
   RefreshControl,
   ScrollView,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -36,10 +34,16 @@ function savedAgo(iso: string): string {
   return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
 }
 
+// Home-style 2-col grid rows.
+function chunkPairs<T>(items: T[]): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
+  return rows;
+}
+
 export default function BookmarksScreen() {
   const router = useRouter();
   const colors = useThemeColors();
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const authStatus = useAuthStore((s) => s.state.status);
   const { toggleLike, isLiked } = useSocialStore();
 
@@ -64,75 +68,78 @@ export default function BookmarksScreen() {
     }
   };
 
-  const renderCenteredState = (
-    icon: string,
-    title: string,
-    text: string,
-    action?: { label: string; onPress: () => void }
-  ) => (
-    <View className="flex-1 items-center justify-center px-10 pt-24">
-      <IconSymbol name={icon as any} size={64} color={colors.mutedForeground} />
-      <Text variant="title" className="mb-2 mt-4 text-center">
-        {title}
-      </Text>
-      <Text variant="body" className="text-center text-muted-foreground">
-        {text}
-      </Text>
-      {action && (
-        <Button variant="brand" className="mt-6 px-10" onPress={action.onPress}>
-          {action.label}
-        </Button>
-      )}
-    </View>
-  );
-
   const renderBody = () => {
     if (authStatus === 'guest') {
-      return renderCenteredState(
-        'bookmark',
-        'Sign in to see your wishlist',
-        'Your saved products live in your YIIVA account',
-        { label: 'Sign In', onPress: () => router.push('/auth/login') }
+      return (
+        <EmptyState
+          fill
+          icon="bookmark"
+          title="Sign in to see your wishlist"
+          caption="Your saved products live in your YIIVA account"
+        >
+          <Button variant="brand" className="mt-4 px-10" onPress={() => router.push('/auth/login')}>
+            Sign In
+          </Button>
+        </EmptyState>
       );
     }
 
     if (bookmarksQuery.isPending || authStatus === 'loading') {
+      // Mirrors the real grid anatomy (2:3 card + caption line), like Home.
       return (
-        <View className="flex-row flex-wrap gap-3 px-5 pt-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="aspect-[2/3] flex-1 basis-[45%] rounded-xl" />
+        <View className="pt-4">
+          {[0, 1].map((r) => (
+            <View key={r} className="mb-3 flex-row gap-3 px-3">
+              {[0, 1].map((c) => (
+                <View key={c} className="flex-1 gap-2">
+                  <Skeleton className="aspect-[2/3] w-full rounded-xl" />
+                  <Skeleton className="h-3 w-3/5" />
+                </View>
+              ))}
+            </View>
           ))}
         </View>
       );
     }
 
     if (bookmarksQuery.isError) {
-      return renderCenteredState(
-        'bookmark',
-        "Couldn't load your wishlist",
-        'Check your connection and try again.',
-        { label: 'Retry', onPress: () => bookmarksQuery.refetch() }
+      return (
+        <EmptyState
+          fill
+          icon="wifi.slash"
+          title="Couldn't load your wishlist"
+          caption="Check your connection and try again."
+        >
+          <Button variant="brand" className="mt-4 px-10" onPress={() => bookmarksQuery.refetch()}>
+            Retry
+          </Button>
+        </EmptyState>
       );
     }
 
     if (bookmarks.length === 0) {
-      return renderCenteredState(
-        'bookmark',
-        'No bookmarks yet',
-        'Save products you love by tapping the bookmark icon',
-        { label: 'Start exploring', onPress: () => router.replace('/(tabs)') }
+      return (
+        <EmptyState
+          fill
+          icon="bookmark"
+          title="No bookmarks yet"
+          caption="Save products you love by tapping the bookmark icon"
+        >
+          <Button variant="brand" className="mt-4 px-10" onPress={() => router.replace('/(tabs)')}>
+            Start exploring
+          </Button>
+        </EmptyState>
       );
     }
 
     return (
-      <View className="flex-1">
-        {viewMode === 'list' ? (
-          // List view with ProductCards
-          <View className="px-5 pt-4">
-            {bookmarks.map((bookmark) => {
+      <View className="pt-4">
+        {chunkPairs(bookmarks).map((row) => (
+          <View key={row[0].product.id} className="mb-3 flex-row gap-3 px-3">
+            {row.map((bookmark) => {
               const { product } = bookmark;
               return (
-                <View key={product.id} className="mb-4">
+                <View key={product.id} className="flex-1">
                   <ProductCard
                     productImage={imageSource(product.primaryImage)}
                     profileImage={imageSource(product.merchant.logo)}
@@ -146,7 +153,7 @@ export default function BookmarksScreen() {
                     isLiked={isLiked(product.id)}
                     isBookmarked={true}
                   />
-                  <View className="mt-2 flex-row items-center gap-3 pl-1">
+                  <View className="mt-1.5 gap-0.5 pl-1">
                     <Text variant="caption">Saved {savedAgo(bookmark.bookmarkedAt)}</Text>
                     {!product.available && (
                       <Text variant="caption" className="font-semibold text-danger">
@@ -157,25 +164,10 @@ export default function BookmarksScreen() {
                 </View>
               );
             })}
+            {/* Keep an odd last card at half width */}
+            {row.length === 1 && <View className="flex-1" />}
           </View>
-        ) : (
-          // Grid view with MasonryGrid
-          <View className="px-5 pt-4">
-            <MasonryGrid
-              data={bookmarks.map((bookmark) => ({
-                id: bookmark.product.id,
-                image: imageSource(bookmark.product.primaryImage),
-                brand: bookmark.product.merchant.displayName,
-                title: bookmark.product.name,
-                price: formatZAR(bookmark.product.price),
-                height: Math.floor(Math.random() * 100) + 200,
-              }))}
-              onItemPress={(item) => router.push(`/product/${item.id}`)}
-              spacing={12}
-              columns={2}
-            />
-          </View>
-        )}
+        ))}
         {bookmarksQuery.isFetchingNextPage && (
           <ActivityIndicator
             size="small"
@@ -187,34 +179,18 @@ export default function BookmarksScreen() {
     );
   };
 
+  const savedCount = bookmarks.length;
+
   return (
     <View className="flex-1 bg-background">
       {/* Header */}
-      <View className="flex-row items-center justify-between border-b border-border px-5 pb-4 pt-16">
+      <View className="flex-row items-end justify-between border-b border-border px-5 pb-4 pt-16">
         <Text variant="title">Wishlist</Text>
-
-        {/* Segmented list/grid toggle */}
-        <View className="flex-row rounded-lg bg-muted p-1">
-          {(['list', 'grid'] as const).map((mode) => {
-            const active = viewMode === mode;
-            return (
-              <TouchableOpacity
-                key={mode}
-                onPress={() => setViewMode(mode)}
-                activeOpacity={0.7}
-                className={`h-8 w-9 items-center justify-center rounded-md ${
-                  active ? 'bg-card' : ''
-                }`}
-              >
-                <IconSymbol
-                  name={mode === 'list' ? 'list.bullet' : 'square.grid.2x2'}
-                  size={18}
-                  color={active ? colors.foreground : colors.mutedForeground}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {authStatus === 'authenticated' && savedCount > 0 && !bookmarksQuery.hasNextPage && (
+          <Text variant="caption" className="mb-1 text-muted-foreground">
+            {savedCount} saved
+          </Text>
+        )}
       </View>
 
       <ScrollView

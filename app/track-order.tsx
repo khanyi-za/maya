@@ -1,7 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  ActivityIndicator,
   Alert,
   RefreshControl,
   ScrollView,
@@ -14,12 +13,14 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useCancelOrder, useOrder, useOrderTracking } from '@/hooks/useOrderQueries';
 import { APIError, type MobileOrderStatus } from '@/lib/api-client';
 import { formatZAR } from '@/lib/format';
+import { haptics } from '@/lib/haptics';
 import { imageSource } from '@/lib/image-source';
 import { ORDER_STATUS } from '@/lib/order-status';
 import { cn } from '@/lib/utils';
@@ -108,9 +109,8 @@ export default function TrackOrderScreen() {
 
   const handleClosePress = () => router.dismissTo('/(tabs)');
 
-  const handleContactBrand = () => {
-    const username = order?.items[0]?.merchant.username;
-    if (username) router.push(`/chat/${username}`);
+  const handleContactBrand = (username: string) => {
+    router.push(`/chat/${username}`);
   };
 
   const canCancel =
@@ -127,14 +127,16 @@ export default function TrackOrderScreen() {
       {
         text: 'Cancel purchase',
         style: 'destructive',
-        onPress: () =>
+        onPress: () => {
+          haptics.medium();
           cancelMutation.mutate(
             { orderId, reason: 'CHANGED_MIND' },
             {
               onError: () =>
                 Alert.alert("Couldn't cancel", 'The purchase may already be processing.'),
             }
-          ),
+          );
+        },
       },
     ]);
   };
@@ -159,21 +161,21 @@ export default function TrackOrderScreen() {
       !orderId ||
       (orderQuery.error instanceof APIError && orderQuery.error.status === 404);
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View className="flex-1 items-center justify-center gap-4 px-10" style={{ paddingTop: insets.top }}>
-          <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
-          <Text variant="title" className="text-center">
-            {notFound ? "We couldn't find that purchase" : "Couldn't load your purchase"}
-          </Text>
+        <EmptyState
+          fill
+          icon={notFound ? 'questionmark' : 'wifi.slash'}
+          title={notFound ? "We couldn't find that purchase" : "Couldn't load your purchase"}
+        >
           <Button
             variant="brand"
-            className="px-10"
+            className="mt-4 px-10"
             onPress={() => (notFound ? handleClosePress() : orderQuery.refetch())}
           >
             {notFound ? 'Browse YIIVA' : 'Retry'}
           </Button>
-        </View>
+        </EmptyState>
       </View>
     );
   }
@@ -195,6 +197,23 @@ export default function TrackOrderScreen() {
   const statusMeta = ORDER_STATUS[order.status];
   const timeline = buildTimeline(order.status, order.statusHistory);
   const address = order.shipping.address;
+
+  // Same brand grouping as cart/checkout — a purchase can span stores, and
+  // each brand fulfills its own slice.
+  const merchantGroups: {
+    merchant: (typeof order.items)[number]['merchant'];
+    items: typeof order.items;
+  }[] = [];
+  for (const item of order.items) {
+    const existing = merchantGroups.find(
+      (g) => g.merchant.username === item.merchant.username
+    );
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      merchantGroups.push({ merchant: item.merchant, items: [item] });
+    }
+  }
   const estimatedDelivery =
     tracking?.estimatedDeliveryTo ?? order.shipping.estimatedDelivery;
 
@@ -294,44 +313,48 @@ export default function TrackOrderScreen() {
             Items ({order.items.reduce((sum, item) => sum + item.quantity, 0)})
           </Text>
 
-          {order.items.map((item) => {
-            const imageAsset = imageSource(item.image);
-            return (
-              <View
-                key={item.id}
-                className="mb-3 flex-row items-center gap-3 border-b border-border pb-3"
-              >
-                {imageAsset ? (
-                  <Image
-                    source={imageAsset}
-                    style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <View className="h-20 w-[60px] rounded-lg bg-muted" />
-                )}
-                <View className="flex-1">
-                  <Text variant="label" numberOfLines={2} className="mb-1">
-                    {item.name}
-                  </Text>
-                  <Text variant="caption" className="mb-1 italic">
-                    By {item.merchant.displayName}
-                  </Text>
-                  {item.size && (
-                    <Text variant="caption" className="mb-2">
-                      Size: {item.size}
-                    </Text>
-                  )}
-                  <View className="flex-row items-center justify-between">
-                    <Text variant="caption" className="font-semibold">
-                      Qty: {item.quantity}
-                    </Text>
-                    <Text variant="label">{formatZAR(item.lineTotal)}</Text>
+          {merchantGroups.map((group) => (
+            <View key={group.merchant.username}>
+              <Text variant="caption" className="mb-2 font-semibold">
+                {group.merchant.displayName}
+              </Text>
+              {group.items.map((item) => {
+                const imageAsset = imageSource(item.image);
+                return (
+                  <View
+                    key={item.id}
+                    className="mb-3 flex-row items-center gap-3 border-b border-border pb-3"
+                  >
+                    {imageAsset ? (
+                      <Image
+                        source={imageAsset}
+                        style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View className="h-20 w-[60px] rounded-lg bg-muted" />
+                    )}
+                    <View className="flex-1">
+                      <Text variant="label" numberOfLines={2} className="mb-1">
+                        {item.name}
+                      </Text>
+                      {item.size && (
+                        <Text variant="caption" className="mb-2">
+                          Size: {item.size}
+                        </Text>
+                      )}
+                      <View className="flex-row items-center justify-between">
+                        <Text variant="caption" className="font-semibold">
+                          Qty: {item.quantity}
+                        </Text>
+                        <Text variant="label">{formatZAR(item.lineTotal)}</Text>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
-            );
-          })}
+                );
+              })}
+            </View>
+          ))}
 
           <View className="gap-2">
             <View className="flex-row items-center gap-2">
@@ -386,7 +409,11 @@ export default function TrackOrderScreen() {
               Courier Tracking
             </Text>
             {trackingQuery.isPending ? (
-              <ActivityIndicator size="small" color={colors.mutedForeground} />
+              <View className="gap-2.5">
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-3 w-4/5" />
+                <Skeleton className="h-3 w-2/5" />
+              </View>
             ) : tracking ? (
               <>
                 <View className="mb-3">
@@ -426,18 +453,30 @@ export default function TrackOrderScreen() {
           </Card>
         )}
 
-        {/* Actions */}
+        {/* Actions — one contact row per brand in the purchase */}
         <Card className="mx-5 mt-4 p-5">
-          <TouchableOpacity className="flex-row items-center gap-3 py-1" onPress={handleContactBrand}>
-            <IconSymbol name="message" size={20} color={colors.brand} />
-            <View className="flex-1">
-              <Text variant="label" className="mb-0.5">
-                Contact {order.items[0]?.merchant.displayName ?? 'the brand'}
-              </Text>
-              <Text variant="caption">Ask questions about your purchase</Text>
+          {merchantGroups.map((group, i) => (
+            <View key={group.merchant.username}>
+              {i > 0 && <Separator className="my-4" />}
+              <TouchableOpacity
+                className="flex-row items-center gap-3 py-1"
+                onPress={() => handleContactBrand(group.merchant.username)}
+              >
+                <IconSymbol name="message" size={20} color={colors.brand} />
+                <View className="flex-1">
+                  <Text variant="label" className="mb-0.5">
+                    Contact {group.merchant.displayName}
+                  </Text>
+                  <Text variant="caption">
+                    {merchantGroups.length > 1
+                      ? `About their items in this purchase`
+                      : 'Ask questions about your purchase'}
+                  </Text>
+                </View>
+                <IconSymbol name="chevron.right" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
             </View>
-            <IconSymbol name="chevron.right" size={16} color={colors.mutedForeground} />
-          </TouchableOpacity>
+          ))}
 
           {canCancel && (
             <>

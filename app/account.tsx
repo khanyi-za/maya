@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -7,11 +7,14 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Avatar } from '@/components/ui/avatar';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Separator } from '@/components/ui/separator';
-import { useThemeColors, type ThemeColors } from '@/lib/theme';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useThemeColors } from '@/lib/theme';
 import { useAddresses } from '@/hooks/useCheckoutQueries';
 import { useAuthStore } from '@/lib/auth-store';
 import { logout } from '@/lib/auth';
+import { haptics } from '@/lib/haptics';
 import type { Address } from '@/lib/api-client';
 
 /**
@@ -28,36 +31,50 @@ export default function AccountScreen() {
   const authState = useAuthStore((s) => s.state);
   const addressesQuery = useAddresses();
 
-  const handleSignOut = async () => {
-    await logout();
-    router.replace('/(tabs)');
+  const handleSignOut = () => {
+    Alert.alert('Sign out?', 'You can sign back in at any time.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          haptics.medium();
+          await logout();
+          router.replace('/(tabs)');
+        },
+      },
+    ]);
   };
 
   const renderBody = () => {
     if (authState.status === 'loading') {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <ActivityIndicator size="large" color={colors.mutedForeground} />
+        <View className="px-5 pt-6">
+          <View className="flex-row items-center gap-4">
+            <Skeleton className="h-16 w-16 rounded-full" />
+            <View className="flex-1 gap-2">
+              <Skeleton className="h-5 w-2/5" />
+              <Skeleton className="h-3 w-3/5" />
+            </View>
+          </View>
+          <Skeleton className="mt-8 h-24 w-full rounded-xl" />
+          <Skeleton className="mt-4 h-14 w-full rounded-xl" />
         </View>
       );
     }
 
     if (authState.status === 'guest') {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <View className="mb-5 h-[88px] w-[88px] items-center justify-center rounded-full bg-muted">
-            <IconSymbol name="person.crop.circle" size={44} color={colors.mutedForeground} />
-          </View>
-          <Text variant="title" className="mb-2 text-center">
-            Sign in to your account
-          </Text>
-          <Text variant="body" className="mb-6 text-center text-muted-foreground">
-            Manage your profile, addresses, and purchases
-          </Text>
-          <Button variant="brand" className="px-12" onPress={() => router.push('/auth/login')}>
+        <EmptyState
+          fill
+          icon="person.crop.circle"
+          title="Sign in to your account"
+          caption="Manage your profile, addresses, and purchases"
+        >
+          <Button variant="brand" className="mt-4 px-12" onPress={() => router.push('/auth/login')}>
             Sign In
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
@@ -89,7 +106,7 @@ export default function AccountScreen() {
         <Text variant="micro" className="mb-2 mt-4 px-5 uppercase tracking-wide">
           Delivery addresses
         </Text>
-        <Card className="mx-5 px-4">{renderAddresses(addressesQuery, colors)}</Card>
+        <Card className="mx-5 px-4">{renderAddresses(addressesQuery)}</Card>
         <Text variant="caption" className="mt-2 px-5">
           You can add or change addresses during checkout.
         </Text>
@@ -128,9 +145,7 @@ export default function AccountScreen() {
         style={{ paddingTop: insets.top + 16 }}
       >
         <TouchableOpacity onPress={() => router.back()} className="h-10 w-10 justify-center">
-          <Text className="text-foreground" style={{ fontSize: 26 }}>
-            ←
-          </Text>
+          <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text variant="heading">Account</Text>
         <View className="w-10" />
@@ -141,9 +156,14 @@ export default function AccountScreen() {
   );
 }
 
-function renderAddresses(query: ReturnType<typeof useAddresses>, colors: ThemeColors) {
+function renderAddresses(query: ReturnType<typeof useAddresses>) {
   if (query.isPending) {
-    return <ActivityIndicator color={colors.mutedForeground} className="py-5" />;
+    return (
+      <View className="gap-2 py-4">
+        <Skeleton className="h-4 w-2/5" />
+        <Skeleton className="h-3 w-4/5" />
+      </View>
+    );
   }
   if (query.isError) {
     return (

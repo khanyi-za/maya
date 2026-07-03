@@ -13,12 +13,14 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useOrders } from '@/hooks/useOrderQueries';
 import { useAuthStore } from '@/lib/auth-store';
 import type { OrderListItem } from '@/lib/api-client';
 import { formatZAR } from '@/lib/format';
+import { haptics } from '@/lib/haptics';
 import { imageSource } from '@/lib/image-source';
 import { ORDER_STATUS } from '@/lib/order-status';
 import { useThemeColors } from '@/lib/theme';
@@ -79,18 +81,16 @@ export default function OrdersScreen() {
   const renderBody = () => {
     if (authStatus === 'guest') {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <IconSymbol name="bag" size={72} color={colors.mutedForeground} />
-          <Text variant="title" className="mb-2 mt-6 text-center">
-            Sign in to see your purchases
-          </Text>
-          <Text variant="body" className="mb-6 text-center text-muted-foreground">
-            Your purchase history lives in your YIIVA account
-          </Text>
-          <Button variant="brand" className="px-10" onPress={() => router.push('/auth/login')}>
+        <EmptyState
+          fill
+          icon="bag"
+          title="Sign in to see your purchases"
+          caption="Your purchase history lives in your YIIVA account"
+        >
+          <Button variant="brand" className="mt-4 px-10" onPress={() => router.push('/auth/login')}>
             Sign In
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
@@ -100,32 +100,26 @@ export default function OrdersScreen() {
 
     if (ordersQuery.isError) {
       return (
-        <View className="flex-1 items-center justify-center gap-4 px-8">
-          <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
-          <Text variant="title" className="text-center">
-            Couldn&apos;t load your purchases
-          </Text>
-          <Button variant="brand" className="px-10" onPress={() => ordersQuery.refetch()}>
+        <EmptyState fill icon="wifi.slash" title="Couldn't load your purchases">
+          <Button variant="brand" className="mt-4 px-10" onPress={() => ordersQuery.refetch()}>
             Retry
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
     if (orders.length === 0) {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <IconSymbol name="bag" size={72} color={colors.mutedForeground} />
-          <Text variant="title" className="mb-2 mt-6 text-center">
-            No purchases yet
-          </Text>
-          <Text variant="body" className="mb-6 text-center text-muted-foreground">
-            When you check out, your purchases will appear here.
-          </Text>
-          <Button variant="brand" className="px-10" onPress={() => router.replace('/(tabs)')}>
+        <EmptyState
+          fill
+          icon="bag"
+          title="No purchases yet"
+          caption="When you check out, your purchases will appear here."
+        >
+          <Button variant="brand" className="mt-4 px-10" onPress={() => router.replace('/(tabs)')}>
             Start shopping
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
@@ -156,9 +150,10 @@ export default function OrdersScreen() {
         renderItem={({ item }) => (
           <OrderCard
             order={item}
-            onPress={() =>
-              router.push({ pathname: '/track-order', params: { orderId: item.id } })
-            }
+            onPress={() => {
+              haptics.light();
+              router.push({ pathname: '/track-order', params: { orderId: item.id } });
+            }}
           />
         )}
       />

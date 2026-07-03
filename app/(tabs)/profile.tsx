@@ -1,6 +1,7 @@
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { YiivaHeader } from '@/components/YiivaHeader';
@@ -9,10 +10,11 @@ import { FeedTabs } from '@/components/FeedTabs';
 import { useFilter } from '@/contexts/FilterContext';
 import { useCategories } from '@/hooks/useHomeQueries';
 import { useMerchantDirectory } from '@/hooks/useShopQueries';
+import { haptics } from '@/lib/haptics';
 import { imageSource } from '@/lib/image-source';
 import { useThemeColors } from '@/lib/theme';
 import { cn } from '@/lib/utils';
-import type { DirectoryMerchant, GenderType } from '@/lib/api-client';
+import type { Category, DirectoryMerchant, GenderType } from '@/lib/api-client';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -69,19 +71,30 @@ export default function ProfileScreen() {
   const unreadNotifications = useUnreadNotificationCount();
 
   const handleShopFilterChange = (mode: 'brands' | 'categories') => {
+    haptics.light();
     setShopFilterMode(mode);
     AsyncStorage.setItem(VIEW_MODE_KEY, mode).catch(() => {});
   };
 
-  const handleCategoryPress = (slug: string) => {
-    // Category Listing screen doesn't exist yet (open work in status.md).
-    console.log('Category pressed:', slug);
+  const handleCategoryPress = (category: Category) => {
+    haptics.light();
+    router.push({
+      pathname: '/category/[slug]',
+      params: {
+        slug: category.slug,
+        name: category.displayName,
+        ...(gender ? { gender } : {}),
+      },
+    });
   };
 
-  const handleBrandPress = (brand: DirectoryMerchant) =>
+  const handleBrandPress = (brand: DirectoryMerchant) => {
+    haptics.light();
     router.push(`/artist/${brand.username}`);
+  };
 
   const handleLetterPress = (letter: string) => {
+    haptics.light();
     const y = sectionOffsets.current[letter];
     if (y !== undefined) {
       brandsScrollRef.current?.scrollTo({ y, animated: true });
@@ -112,28 +125,14 @@ export default function ProfileScreen() {
     icon: React.ComponentProps<typeof IconSymbol>['name'],
     title: string,
     body: string
-  ) => (
-    <View className="flex-1 items-center justify-center gap-3 px-10 pt-20">
-      <IconSymbol name={icon} size={64} color={colors.mutedForeground} />
-      <Text variant="title" className="text-center">
-        {title}
-      </Text>
-      <Text variant="body" className="text-center text-muted-foreground">
-        {body}
-      </Text>
-    </View>
-  );
+  ) => <EmptyState fill icon={icon} title={title} caption={body} />;
 
   const renderRetry = (message: string, onRetry: () => void) => (
-    <View className="flex-1 items-center justify-center gap-4 px-10 pt-20">
-      <IconSymbol name="exclamationmark.triangle" size={64} color={colors.mutedForeground} />
-      <Text variant="title" className="text-center">
-        {message}
-      </Text>
-      <Button variant="brand" className="px-10" onPress={onRetry}>
+    <EmptyState fill icon="wifi.slash" title={message}>
+      <Button variant="brand" className="mt-4 px-10" onPress={onRetry}>
         Retry
       </Button>
-    </View>
+    </EmptyState>
   );
 
   const renderCategoriesSkeleton = () => (
@@ -187,7 +186,7 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={category.slug}
               className="mb-3 overflow-hidden rounded-2xl bg-muted"
-              onPress={() => handleCategoryPress(category.slug)}
+              onPress={() => handleCategoryPress(category)}
               activeOpacity={0.9}
             >
               <View className="min-h-[100px] flex-row items-center justify-between px-6 py-6">
@@ -296,9 +295,14 @@ export default function ProfileScreen() {
                     size={40}
                     variant="logo"
                   />
-                  <Text variant="label" className="flex-1">
-                    {brand.displayName}
-                  </Text>
+                  <View className="flex-1">
+                    <Text variant="label">{brand.displayName}</Text>
+                    {brand.productCount > 0 && (
+                      <Text variant="caption" className="mt-0.5 text-muted-foreground">
+                        {brand.productCount} {brand.productCount === 1 ? 'product' : 'products'}
+                      </Text>
+                    )}
+                  </View>
                   <IconSymbol name="chevron.right" size={20} color={colors.mutedForeground} />
                 </TouchableOpacity>
               ))}

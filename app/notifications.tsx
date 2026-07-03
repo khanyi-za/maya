@@ -10,6 +10,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import {
   useMarkAllNotificationsRead,
@@ -17,6 +19,7 @@ import {
   useNotifications,
 } from '@/hooks/useNotificationQueries';
 import { useAuthStore } from '@/lib/auth-store';
+import { haptics } from '@/lib/haptics';
 import { useThemeColors } from '@/lib/theme';
 import type { AppNotification, AppNotificationType } from '@/lib/api-client';
 
@@ -62,6 +65,7 @@ export default function NotificationsScreen() {
   const unreadCount = query.data?.pages[0]?.unreadCount ?? 0;
 
   const handlePress = (n: AppNotification) => {
+    haptics.light();
     if (!n.isRead) markRead.mutate(n.id);
     const orderId = n.data?.orderId;
     if (orderId) {
@@ -72,55 +76,50 @@ export default function NotificationsScreen() {
   const renderBody = () => {
     if (authStatus === 'guest') {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <IconSymbol name="bell" size={64} color={colors.mutedForeground} />
-          <Text variant="title" className="mb-6 mt-4 text-center">
-            Sign in to see your notifications
-          </Text>
-          <Button variant="brand" className="px-10" onPress={() => router.push('/auth/login')}>
+        <EmptyState fill icon="bell" title="Sign in to see your notifications">
+          <Button variant="brand" className="mt-4 px-10" onPress={() => router.push('/auth/login')}>
             Sign In
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
     if (query.isPending || authStatus === 'loading') {
+      // Mirrors the row anatomy: icon circle + title/body/time lines.
       return (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color={colors.mutedForeground} />
+        <View className="pt-2">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} className="flex-row gap-3 border-b border-border px-5 py-4">
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <View className="flex-1 gap-2">
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-3 w-4/5" />
+                <Skeleton className="h-3 w-16" />
+              </View>
+            </View>
+          ))}
         </View>
       );
     }
 
     if (query.isError) {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <IconSymbol
-            name="exclamationmark.triangle"
-            size={64}
-            color={colors.mutedForeground}
-          />
-          <Text variant="title" className="mb-6 mt-4 text-center">
-            Couldn&apos;t load notifications
-          </Text>
-          <Button variant="brand" className="px-10" onPress={() => query.refetch()}>
+        <EmptyState fill icon="wifi.slash" title="Couldn't load notifications">
+          <Button variant="brand" className="mt-4 px-10" onPress={() => query.refetch()}>
             Retry
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
     if (notifications.length === 0) {
       return (
-        <View className="flex-1 items-center justify-center px-8">
-          <IconSymbol name="bell" size={64} color={colors.mutedForeground} />
-          <Text variant="title" className="mb-2 mt-4 text-center">
-            No notifications yet
-          </Text>
-          <Text variant="body" className="text-center text-muted-foreground">
-            Purchase updates and confirmations will show up here.
-          </Text>
-        </View>
+        <EmptyState
+          fill
+          icon="bell"
+          title="No notifications yet"
+          caption="Purchase updates and confirmations will show up here."
+        />
       );
     }
 

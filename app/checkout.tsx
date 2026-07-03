@@ -1,10 +1,8 @@
 import { Stack, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  Modal,
-  Pressable,
+  BackHandler,
   ScrollView,
   TouchableOpacity,
   View,
@@ -12,9 +10,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useCart } from '@/hooks/useCartQueries';
 import {
@@ -24,9 +24,10 @@ import {
   usePlaceOrder,
 } from '@/hooks/useCheckoutQueries';
 import { useAuthStore } from '@/lib/auth-store';
-import { APIError, type Address } from '@/lib/api-client';
+import { APIError, type Address, type ServerCartItem } from '@/lib/api-client';
 import { setPaymentSession } from '@/lib/payment-session';
 import { formatZAR } from '@/lib/format';
+import { haptics } from '@/lib/haptics';
 import { imageSource } from '@/lib/image-source';
 import { useThemeColors } from '@/lib/theme';
 import { cn } from '@/lib/utils';
@@ -60,19 +61,81 @@ const EMPTY_ADDRESS_FORM = {
   postalCode: '',
 };
 
+// Roadmap payment methods — shown on the Payment step but not integrated;
+// checkout is PayFast-only in v1.
+const MOCK_PAYMENT_METHODS: { name: string; caption?: string }[] = [
+  { name: 'Apple Pay' },
+  { name: 'Card', caption: 'Pay directly with your bank card' },
+  { name: 'Payflex', caption: 'Pay in 4, interest-free' },
+];
+
+// 3-step checkout: the address is chosen in Delivery and re-confirmed on
+// Review (with an edit affordance) before any money moves — the commit
+// button only exists on step 3.
+type Step = 1 | 2 | 3;
+const STEP_LABELS = ['Delivery', 'Payment', 'Review'] as const;
+
+function Stepper({ step, onStepPress }: { step: Step; onStepPress: (s: Step) => void }) {
+  const colors = useThemeColors();
+  return (
+    <View className="border-b border-border px-8 pb-3 pt-4">
+      <View className="flex-row">
+        {STEP_LABELS.map((label, i) => {
+          const n = (i + 1) as Step;
+          const done = step > n;
+          const current = step === n;
+          return (
+            <React.Fragment key={label}>
+              {i > 0 && (
+                <View
+                  className={cn('mt-[13px] h-[2px] flex-1', step > i ? 'bg-brand' : 'bg-border')}
+                />
+              )}
+              <TouchableOpacity
+                className="w-16 items-center"
+                onPress={() => onStepPress(n)}
+                disabled={!done}
+              >
+                {done ? (
+                  <View className="h-7 w-7 items-center justify-center rounded-full border-2 border-brand">
+                    <IconSymbol name="checkmark" size={12} color={colors.brand} />
+                  </View>
+                ) : current ? (
+                  <View className="h-7 w-7 rounded-full bg-brand" />
+                ) : (
+                  <View className="h-7 w-7 items-center justify-center">
+                    <View className="h-3 w-3 rounded-full bg-border" />
+                  </View>
+                )}
+                <Text
+                  variant="caption"
+                  className={cn('mt-1.5', current ? 'font-semibold' : 'text-muted-foreground')}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function CheckoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const authStatus = useAuthStore((s) => s.state.status);
+  const scrollRef = useRef<ScrollView>(null);
 
   const cartQuery = useCart();
   const addressesQuery = useAddresses();
   const createAddressMutation = useCreateAddress();
   const placeOrderMutation = usePlaceOrder();
 
+  const [step, setStep] = useState<Step>(1);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [addressModalVisible, setAddressModalVisible] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS_FORM);
   const [formError, setFormError] = useState<string | null>(null);
@@ -81,8 +144,24 @@ export default function CheckoutScreen() {
     () => addressesQuery.data?.addresses ?? [],
     [addressesQuery.data]
   );
-  const items = cartQuery.data?.cart.items ?? [];
+  const items = useMemo(() => cartQuery.data?.cart.items ?? [], [cartQuery.data]);
   const hasUnavailable = items.some((item) => !item.available);
+
+  // Same brand grouping as the Cart screen — checkout creates one order per
+  // store, so the summary mirrors that split.
+  const groups = useMemo(() => {
+    const map = new Map<string, { merchant: ServerCartItem['merchant']; items: ServerCartItem[] }>();
+    for (const item of items) {
+      const key = item.merchant.username;
+      const group = map.get(key);
+      if (group) {
+        group.items.push(item);
+      } else {
+        map.set(key, { merchant: item.merchant, items: [item] });
+      }
+    }
+    return [...map.values()];
+  }, [items]);
 
   // Default to the user's default address (or their only one) once loaded.
   useEffect(() => {
@@ -104,7 +183,31 @@ export default function CheckoutScreen() {
     }
   }, [authStatus, router]);
 
-  const handleBackPress = () => router.back();
+  const goToStep = (next: Step) => {
+    haptics.light();
+    setStep(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
+
+  // Header back walks back a step before leaving the screen; Android
+  // hardware back matches.
+  const handleBackPress = () => {
+    if (step > 1) {
+      goToStep((step - 1) as Step);
+    } else {
+      router.back();
+    }
+  };
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (step > 1) {
+        setStep((s) => (s - 1) as Step);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [step]);
 
   const canPlaceOrder =
     !!quote &&
@@ -123,6 +226,7 @@ export default function CheckoutScreen() {
       },
       {
         onSuccess: (result) => {
+          haptics.success();
           setPaymentSession(result);
           router.push('/payfast');
         },
@@ -172,7 +276,6 @@ export default function CheckoutScreen() {
           setSelectedAddressId(data.address.id);
           setAddressForm(EMPTY_ADDRESS_FORM);
           setShowAddressForm(false);
-          setAddressModalVisible(false);
         },
         onError: (err) => {
           setFormError(
@@ -183,177 +286,477 @@ export default function CheckoutScreen() {
     );
   };
 
-  const renderAddressModal = () => (
-    <Modal
-      visible={addressModalVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setAddressModalVisible(false)}
-    >
-      <View className="flex-1 justify-end">
-        <Pressable
-          className="absolute inset-0 bg-black/50"
-          onPress={() => setAddressModalVisible(false)}
-        />
-        <View
-          className="max-h-[85%] rounded-t-[20px] bg-card px-5 pt-3"
-          style={{ paddingBottom: insets.bottom + 16 }}
-        >
-          <View className="mb-4 h-1 w-10 self-center rounded-full bg-border" />
-          <Text variant="heading" className="mb-4">
-            {showAddressForm ? 'Add address' : 'Delivery address'}
+  const renderAddressForm = () => (
+    <View>
+      {formError && (
+        <Text variant="caption" className="mb-3 text-danger">
+          {formError}
+        </Text>
+      )}
+      <Input
+        className="mb-3"
+        placeholder="Recipient name"
+        error={!!formError}
+        value={addressForm.recipientName}
+        onChangeText={(v) => setAddressForm((s) => ({ ...s, recipientName: v }))}
+      />
+      <Input
+        className="mb-3"
+        placeholder="Phone (e.g. 0821234567)"
+        error={!!formError}
+        keyboardType="phone-pad"
+        value={addressForm.phone}
+        onChangeText={(v) => setAddressForm((s) => ({ ...s, phone: v }))}
+      />
+      <Input
+        className="mb-3"
+        placeholder="Street address"
+        error={!!formError}
+        value={addressForm.line1}
+        onChangeText={(v) => setAddressForm((s) => ({ ...s, line1: v }))}
+      />
+      <Input
+        className="mb-3"
+        placeholder="Apartment, suite, etc. (optional)"
+        value={addressForm.line2}
+        onChangeText={(v) => setAddressForm((s) => ({ ...s, line2: v }))}
+      />
+      <Input
+        className="mb-3"
+        placeholder="City"
+        error={!!formError}
+        value={addressForm.city}
+        onChangeText={(v) => setAddressForm((s) => ({ ...s, city: v }))}
+      />
+      <View className="mb-3 flex-row flex-wrap gap-2">
+        {SA_PROVINCES.map((province) => {
+          const active = addressForm.province === province;
+          return (
+            <TouchableOpacity
+              key={province}
+              className={cn(
+                'rounded-2xl border px-3.5 py-2',
+                active ? 'border-brand bg-brand-subtle' : 'border-border bg-muted'
+              )}
+              onPress={() => setAddressForm((s) => ({ ...s, province }))}
+            >
+              <Text
+                variant="caption"
+                className={active ? 'font-semibold text-brand' : ''}
+              >
+                {province}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <Input
+        className="mb-3"
+        placeholder="Postal code (4 digits)"
+        error={!!formError}
+        keyboardType="number-pad"
+        maxLength={4}
+        value={addressForm.postalCode}
+        onChangeText={(v) => setAddressForm((s) => ({ ...s, postalCode: v }))}
+      />
+      <Button
+        variant="brand"
+        size="lg"
+        className="mb-3 mt-2"
+        loading={createAddressMutation.isPending}
+        onPress={handleSubmitAddress}
+      >
+        {createAddressMutation.isPending ? 'Saving…' : 'Save Address'}
+      </Button>
+      {addresses.length > 0 && (
+        <TouchableOpacity onPress={() => setShowAddressForm(false)}>
+          <Text variant="caption" className="mb-2 text-center text-muted-foreground underline">
+            Back to my addresses
           </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
-          {showAddressForm ? (
-            <ScrollView keyboardShouldPersistTaps="handled">
-              {formError && (
-                <Text variant="caption" className="mb-3 text-danger">
-                  {formError}
+  // ── Step 1: Delivery ─────────────────────────────────────────────────────
+  const renderDeliveryStep = () => (
+    <View className="px-5 py-5">
+      <Text variant="title" className="mb-1">
+        Delivery address
+      </Text>
+      <Text variant="body" className="mb-5 text-muted-foreground">
+        Where should your purchase go?
+      </Text>
+
+      {addressesQuery.isPending ? (
+        <View className="gap-2">
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+        </View>
+      ) : showAddressForm || addresses.length === 0 ? (
+        renderAddressForm()
+      ) : (
+        <View>
+          {addresses.map((address: Address) => {
+            const active = selectedAddressId === address.id;
+            return (
+              <TouchableOpacity
+                key={address.id}
+                className={cn(
+                  'mb-3 flex-row items-center rounded-xl border-2 p-4',
+                  active ? 'border-brand bg-brand-subtle' : 'border-border bg-muted'
+                )}
+                onPress={() => {
+                  haptics.light();
+                  setSelectedAddressId(address.id);
+                }}
+              >
+                <View className="flex-1">
+                  <Text variant="label" className="mb-2">
+                    {address.recipientName}
+                    {address.isDefault ? '  ·  Default' : ''}
+                  </Text>
+                  <Text variant="caption">
+                    {address.line1}
+                    {address.line2 ? `, ${address.line2}` : ''}
+                  </Text>
+                  <Text variant="caption">
+                    {address.city}, {address.postalCode}
+                  </Text>
+                  <Text variant="caption">{address.province}</Text>
+                </View>
+                <View
+                  className={cn(
+                    'ml-3 h-5 w-5 items-center justify-center rounded-full border-2',
+                    active ? 'border-brand' : 'border-border'
+                  )}
+                >
+                  {active && <View className="h-2.5 w-2.5 rounded-full bg-brand" />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity
+            className="items-center rounded-xl border border-dashed border-border py-4"
+            onPress={() => setShowAddressForm(true)}
+          >
+            <Text variant="label" className="text-brand">
+              + Add a new address
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  // ── Step 2: Payment ──────────────────────────────────────────────────────
+  const renderPaymentStep = () => (
+    <View className="px-5 py-5">
+      <Text variant="title" className="mb-1">
+        Payment method
+      </Text>
+      <Text variant="body" className="mb-5 text-muted-foreground">
+        You won&apos;t be charged yet — you&apos;ll review your purchase on the
+        next step first.
+      </Text>
+
+      <Card className="overflow-hidden border-2 border-brand bg-brand-subtle">
+        <View className="p-4">
+          <View className="flex-row items-center gap-3">
+            <View className="h-10 w-10 items-center justify-center rounded-lg bg-card">
+              <IconSymbol name="creditcard" size={24} color={colors.foreground} />
+            </View>
+            <View className="flex-1">
+              <Text variant="label" className="mb-0.5">
+                PayFast
+              </Text>
+              <Text variant="caption">
+                Card, Instant EFT and more — secure checkout
+              </Text>
+            </View>
+            <View className="ml-3 h-5 w-5 items-center justify-center rounded-full border-2 border-brand">
+              <View className="h-2.5 w-2.5 rounded-full bg-brand" />
+            </View>
+          </View>
+        </View>
+      </Card>
+
+      {/* Mock methods — displayed for the roadmap, not integrated yet.
+          Inert "Soon" rows (same convention as SideMenu's dead links). */}
+      <Text variant="caption" className="mb-2 mt-6 font-semibold text-muted-foreground">
+        More ways to pay
+      </Text>
+      <View className="overflow-hidden rounded-xl border border-border">
+        {MOCK_PAYMENT_METHODS.map((method, i) => (
+          <View
+            key={method.name}
+            className={cn(
+              'flex-row items-center gap-3 p-4',
+              i < MOCK_PAYMENT_METHODS.length - 1 && 'border-b border-border'
+            )}
+          >
+            <View className="h-5 w-5 rounded-full border-2 border-border" />
+            <View className="flex-1">
+              <View className="flex-row items-center gap-2">
+                <Text variant="label" className="text-muted-foreground">
+                  {method.name}
+                </Text>
+                <Badge tone="neutral">Soon</Badge>
+              </View>
+              {method.caption && (
+                <Text variant="caption" className="mt-0.5 text-muted-foreground">
+                  {method.caption}
                 </Text>
               )}
-              <Input
-                className="mb-3"
-                placeholder="Recipient name"
-                error={!!formError}
-                value={addressForm.recipientName}
-                onChangeText={(v) => setAddressForm((s) => ({ ...s, recipientName: v }))}
-              />
-              <Input
-                className="mb-3"
-                placeholder="Phone (e.g. 0821234567)"
-                error={!!formError}
-                keyboardType="phone-pad"
-                value={addressForm.phone}
-                onChangeText={(v) => setAddressForm((s) => ({ ...s, phone: v }))}
-              />
-              <Input
-                className="mb-3"
-                placeholder="Street address"
-                error={!!formError}
-                value={addressForm.line1}
-                onChangeText={(v) => setAddressForm((s) => ({ ...s, line1: v }))}
-              />
-              <Input
-                className="mb-3"
-                placeholder="Apartment, suite, etc. (optional)"
-                value={addressForm.line2}
-                onChangeText={(v) => setAddressForm((s) => ({ ...s, line2: v }))}
-              />
-              <Input
-                className="mb-3"
-                placeholder="City"
-                error={!!formError}
-                value={addressForm.city}
-                onChangeText={(v) => setAddressForm((s) => ({ ...s, city: v }))}
-              />
-              <View className="mb-3 flex-row flex-wrap gap-2">
-                {SA_PROVINCES.map((province) => {
-                  const active = addressForm.province === province;
-                  return (
-                    <TouchableOpacity
-                      key={province}
-                      className={cn(
-                        'rounded-2xl border px-3.5 py-2',
-                        active ? 'border-brand bg-brand-subtle' : 'border-border bg-muted'
-                      )}
-                      onPress={() => setAddressForm((s) => ({ ...s, province }))}
-                    >
-                      <Text
-                        variant="caption"
-                        className={active ? 'font-semibold text-brand' : ''}
-                      >
-                        {province}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+            </View>
+            {method.name === 'Apple Pay' ? (
+              <View className="flex-row items-center gap-0.5 rounded-md border border-border px-2 py-1">
+                <IconSymbol name="apple.logo" size={12} color={colors.foreground} />
+                <Text className="text-[12px] font-semibold text-foreground">Pay</Text>
               </View>
-              <Input
-                className="mb-3"
-                placeholder="Postal code (4 digits)"
-                error={!!formError}
-                keyboardType="number-pad"
-                maxLength={4}
-                value={addressForm.postalCode}
-                onChangeText={(v) => setAddressForm((s) => ({ ...s, postalCode: v }))}
-              />
-              <Button
-                variant="brand"
-                size="lg"
-                className="mb-3 mt-2"
-                loading={createAddressMutation.isPending}
-                onPress={handleSubmitAddress}
-              >
-                {createAddressMutation.isPending ? 'Saving…' : 'Save Address'}
-              </Button>
-              {addresses.length > 0 && (
-                <TouchableOpacity onPress={() => setShowAddressForm(false)}>
-                  <Text variant="caption" className="mb-2 text-center text-muted-foreground underline">
-                    Back to my addresses
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          ) : (
-            <ScrollView>
-              {addresses.map((address: Address) => {
-                const active = selectedAddressId === address.id;
-                return (
-                  <TouchableOpacity
-                    key={address.id}
-                    className={cn(
-                      'mb-3 flex-row items-center rounded-xl border-2 p-4',
-                      active ? 'border-brand bg-brand-subtle' : 'border-border bg-muted'
-                    )}
-                    onPress={() => {
-                      setSelectedAddressId(address.id);
-                      setAddressModalVisible(false);
-                    }}
-                  >
-                    <View className="flex-1">
-                      <Text variant="label" className="mb-2">
-                        {address.recipientName}
-                        {address.isDefault ? '  ·  Default' : ''}
-                      </Text>
-                      <Text variant="caption">
-                        {address.line1}
-                        {address.line2 ? `, ${address.line2}` : ''}
-                      </Text>
-                      <Text variant="caption">
-                        {address.city}, {address.postalCode}
-                      </Text>
-                    </View>
-                    <View
-                      className={cn(
-                        'ml-3 h-5 w-5 items-center justify-center rounded-full border-2',
-                        active ? 'border-brand' : 'border-border'
-                      )}
-                    >
-                      {active && <View className="h-2.5 w-2.5 rounded-full bg-brand" />}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-              <Button
-                variant="brand"
-                size="lg"
-                className="mb-3 mt-2"
-                onPress={() => setShowAddressForm(true)}
-              >
-                Add New Address
-              </Button>
-            </ScrollView>
-          )}
+            ) : method.name === 'Card' ? (
+              <View className="flex-row items-center gap-2">
+                {/* Brand marks keep their real colors, like the disabled row in the Etsy reference */}
+                <Text style={{ color: '#1A1F71', fontStyle: 'italic', fontWeight: '800', fontSize: 13, letterSpacing: -0.5 }}>
+                  VISA
+                </Text>
+                <View className="flex-row items-center">
+                  <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#EB001B' }} />
+                  <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#F79E1B', marginLeft: -7, opacity: 0.9 }} />
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[13px] font-bold lowercase text-foreground">payflex</Text>
+            )}
+          </View>
+        ))}
+      </View>
+
+      <View className="mt-4 flex-row items-center gap-2">
+        <IconSymbol name="lock.fill" size={14} color={colors.mutedForeground} />
+        <Text variant="caption" className="flex-1 text-muted-foreground">
+          Payments are processed securely by PayFast. YIIVA never sees your
+          card details.
+        </Text>
+      </View>
+    </View>
+  );
+
+  // ── Step 3: Review ───────────────────────────────────────────────────────
+  const renderReviewStep = () => (
+    <View>
+      <View className="px-5 pt-5">
+        <Text variant="title" className="mb-1">
+          Review your purchase
+        </Text>
+        <Text variant="body" className="mb-4 text-muted-foreground">
+          Check that everything is correct — especially the delivery address.
+        </Text>
+      </View>
+
+      {/* Delivery address — re-confirmation with edit */}
+      <View className="border-b border-border px-5 pb-5">
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text variant="heading">Delivering to</Text>
+          <TouchableOpacity className="flex-row items-center gap-1 p-1" onPress={() => goToStep(1)}>
+            <IconSymbol name="pencil" size={14} color={colors.brand} />
+            <Text variant="label" className="text-brand">
+              Edit
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {selectedAddress && (
+          <View className="rounded-xl bg-muted p-4">
+            <Text variant="label" className="mb-2">
+              {selectedAddress.recipientName}
+            </Text>
+            <Text variant="caption">
+              {selectedAddress.line1}
+              {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ''}
+            </Text>
+            <Text variant="caption">
+              {selectedAddress.city}, {selectedAddress.postalCode}
+            </Text>
+            <Text variant="caption">
+              {selectedAddress.province}, South Africa
+            </Text>
+            <Text variant="caption" className="mt-1">
+              {selectedAddress.phone}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Payment method */}
+      <View className="border-b border-border px-5 py-5">
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text variant="heading">Paying with</Text>
+          <TouchableOpacity className="flex-row items-center gap-1 p-1" onPress={() => goToStep(2)}>
+            <IconSymbol name="pencil" size={14} color={colors.brand} />
+            <Text variant="label" className="text-brand">
+              Edit
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <View className="flex-row items-center gap-3 rounded-xl bg-muted p-4">
+          <IconSymbol name="creditcard" size={20} color={colors.foreground} />
+          <Text variant="label">PayFast</Text>
         </View>
       </View>
-    </Modal>
+
+      {/* Purchase Summary — grouped per brand, mirroring the per-store order split */}
+      <View className="border-b border-border px-5 py-5">
+        <Text variant="heading" className="mb-4">
+          Purchase Summary
+        </Text>
+        {cartQuery.isPending ? (
+          <View className="gap-3">
+            {[0, 1].map((i) => (
+              <View key={i} className="flex-row items-center gap-3">
+                <Skeleton className="h-20 w-[60px] rounded-lg" />
+                <View className="flex-1 gap-2">
+                  <Skeleton className="h-4 w-3/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                </View>
+                <Skeleton className="h-4 w-14" />
+              </View>
+            ))}
+          </View>
+        ) : (
+          groups.map((group) => (
+            <View key={group.merchant.username} className="mb-2">
+              <Text variant="caption" className="mb-2 font-semibold">
+                {group.merchant.displayName}
+              </Text>
+              {group.items.map((item) => {
+                const imageAsset = imageSource(item.image);
+                return (
+                  <View key={item.id} className="mb-3 flex-row items-center gap-3">
+                    {imageAsset ? (
+                      <Image
+                        source={imageAsset}
+                        style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View className="h-20 w-[60px] rounded-lg bg-muted" />
+                    )}
+                    <View className="flex-1">
+                      <Text variant="label" className="mb-1" numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      {item.size && (
+                        <Text variant="caption" className="mb-0.5">
+                          Size: {item.size}
+                        </Text>
+                      )}
+                      {item.quantity > 1 && (
+                        <Text variant="caption" className="font-semibold">
+                          Qty: {item.quantity}
+                        </Text>
+                      )}
+                    </View>
+                    <Text variant="label">{formatZAR(item.lineTotal)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* Purchase Total — server quote, VAT-inclusive */}
+      <View className="border-b border-border px-5 py-5">
+        <Text variant="heading" className="mb-4">
+          Purchase Total
+        </Text>
+        {quoteQuery.isPending ? (
+          <View className="gap-3">
+            {[0, 1, 2].map((i) => (
+              <View key={i} className="flex-row items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-16" />
+              </View>
+            ))}
+          </View>
+        ) : quoteQuery.isError ? (
+          <View>
+            <Text variant="caption" className="mb-2">
+              {quoteQuery.error instanceof APIError
+                ? quoteQuery.error.message
+                : "Couldn't get shipping rates."}
+            </Text>
+            <TouchableOpacity onPress={() => quoteQuery.refetch()}>
+              <Text variant="label" className="text-brand">
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : quote ? (
+          <View className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">Subtotal</Text>
+              <Text variant="body" className="font-medium">{formatZAR(quote.subtotal)}</Text>
+            </View>
+            <View className="flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">Shipping</Text>
+              <Text variant="body" className="font-medium">{formatZAR(quote.shipping)}</Text>
+            </View>
+            <View className="flex-row items-center justify-between">
+              <Text variant="body" className="text-muted-foreground">VAT (included)</Text>
+              <Text variant="body" className="font-medium">{formatZAR(quote.tax)}</Text>
+            </View>
+            <View className="mt-2 flex-row items-center justify-between border-t border-border pt-3">
+              <Text variant="heading">Total</Text>
+              <Text variant="heading">{formatZAR(quote.total)}</Text>
+            </View>
+          </View>
+        ) : null}
+      </View>
+    </View>
   );
+
+  // Per-step primary CTA in the fixed bottom bar.
+  const renderCta = () => {
+    if (step === 1) {
+      return (
+        <Button
+          variant="brand"
+          size="lg"
+          disabled={!selectedAddress || showAddressForm}
+          onPress={() => goToStep(2)}
+        >
+          Continue to Payment
+        </Button>
+      );
+    }
+    if (step === 2) {
+      return (
+        <Button variant="brand" size="lg" onPress={() => goToStep(3)}>
+          Continue to Review
+        </Button>
+      );
+    }
+    return (
+      <Button
+        variant="brand"
+        size="lg"
+        loading={placeOrderMutation.isPending}
+        disabled={!canPlaceOrder}
+        onPress={handlePlaceOrder}
+      >
+        {placeOrderMutation.isPending
+          ? 'COMPLETING PURCHASE…'
+          : quote
+            ? `COMPLETE PURCHASE - ${formatZAR(quote.total)}`
+            : 'COMPLETE PURCHASE'}
+      </Button>
+    );
+  };
 
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-
-      {renderAddressModal()}
 
       {/* Header */}
       <View
@@ -367,7 +770,14 @@ export default function CheckoutScreen() {
         <View className="w-10" />
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <Stepper step={step} onStepPress={goToStep} />
+
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Unavailable-items banner */}
         {hasUnavailable && (
           <View className="mx-5 mt-4 gap-2 rounded-[10px] bg-danger-subtle p-3.5">
@@ -383,195 +793,20 @@ export default function CheckoutScreen() {
           </View>
         )}
 
-        {/* Purchase Summary */}
-        <View className="border-b border-border px-5 py-5">
-          <Text variant="heading" className="mb-4">
-            Purchase Summary
-          </Text>
-          {cartQuery.isPending ? (
-            <ActivityIndicator size="small" color={colors.mutedForeground} />
-          ) : (
-            items.map((item) => {
-              const imageAsset = imageSource(item.image);
-              return (
-                <View key={item.id} className="mb-3 flex-row items-center gap-3">
-                  {imageAsset ? (
-                    <Image
-                      source={imageAsset}
-                      style={{ width: 60, height: 80, borderRadius: 8, backgroundColor: colors.muted }}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View className="h-20 w-[60px] rounded-lg bg-muted" />
-                  )}
-                  <View className="flex-1">
-                    <Text variant="label" className="mb-1" numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <Text variant="caption" className="mb-0.5 italic">
-                      By {item.merchant.displayName}
-                    </Text>
-                    {item.size && (
-                      <Text variant="caption" className="mb-0.5">
-                        Size: {item.size}
-                      </Text>
-                    )}
-                    {item.quantity > 1 && (
-                      <Text variant="caption" className="font-semibold">
-                        Qty: {item.quantity}
-                      </Text>
-                    )}
-                  </View>
-                  <Text variant="label">{formatZAR(item.lineTotal)}</Text>
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        {/* Delivery Address */}
-        <View className="border-b border-border px-5 py-5">
-          <View className="flex-row items-center justify-between">
-            <Text variant="heading" className="mb-4">
-              Delivery Address
-            </Text>
-            {addresses.length > 0 && (
-              <TouchableOpacity onPress={() => { setShowAddressForm(false); setAddressModalVisible(true); }}>
-                <Text variant="label" className="text-brand">
-                  Change
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {addressesQuery.isPending ? (
-            <ActivityIndicator size="small" color={colors.mutedForeground} />
-          ) : selectedAddress ? (
-            <View className="rounded-xl bg-muted p-4">
-              <Text variant="label" className="mb-2">
-                {selectedAddress.recipientName}
-              </Text>
-              <Text variant="caption">
-                {selectedAddress.line1}
-                {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ''}
-              </Text>
-              <Text variant="caption">
-                {selectedAddress.city}, {selectedAddress.postalCode}
-              </Text>
-              <Text variant="caption">
-                {selectedAddress.province}, South Africa
-              </Text>
-              <Text variant="caption" className="mt-1">
-                {selectedAddress.phone}
-              </Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              className="items-center rounded-xl border border-dashed border-border py-5"
-              onPress={() => { setShowAddressForm(true); setAddressModalVisible(true); }}
-            >
-              <Text variant="label" className="text-brand">
-                + Add a delivery address
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Payment Method — PayFast redirect only in v1 */}
-        <View className="border-b border-border px-5 py-5">
-          <Text variant="heading" className="mb-4">
-            Payment Method
-          </Text>
-          <Card className="overflow-hidden border-2 border-brand bg-brand-subtle">
-            <View className="p-4">
-              <View className="flex-row items-center gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-lg bg-card">
-                  <IconSymbol name="creditcard" size={24} color={colors.foreground} />
-                </View>
-                <View className="flex-1">
-                  <Text variant="label" className="mb-0.5">
-                    PayFast
-                  </Text>
-                  <Text variant="caption">
-                    Card, Instant EFT and more — secure checkout
-                  </Text>
-                </View>
-                <View className="ml-3 h-5 w-5 items-center justify-center rounded-full border-2 border-brand">
-                  <View className="h-2.5 w-2.5 rounded-full bg-brand" />
-                </View>
-              </View>
-            </View>
-          </Card>
-        </View>
-
-        {/* Purchase Total — server quote, VAT-inclusive */}
-        <View className="border-b border-border px-5 py-5">
-          <Text variant="heading" className="mb-4">
-            Purchase Total
-          </Text>
-          {!selectedAddress ? (
-            <Text variant="caption" className="mb-2">
-              Add a delivery address to see shipping and totals.
-            </Text>
-          ) : quoteQuery.isPending ? (
-            <ActivityIndicator size="small" color={colors.mutedForeground} />
-          ) : quoteQuery.isError ? (
-            <View>
-              <Text variant="caption" className="mb-2">
-                {quoteQuery.error instanceof APIError
-                  ? quoteQuery.error.message
-                  : "Couldn't get shipping rates."}
-              </Text>
-              <TouchableOpacity onPress={() => quoteQuery.refetch()}>
-                <Text variant="label" className="text-brand">
-                  Retry
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : quote ? (
-            <View className="gap-3">
-              <View className="flex-row items-center justify-between">
-                <Text variant="body" className="text-muted-foreground">Subtotal</Text>
-                <Text variant="body" className="font-medium">{formatZAR(quote.subtotal)}</Text>
-              </View>
-              <View className="flex-row items-center justify-between">
-                <Text variant="body" className="text-muted-foreground">Shipping</Text>
-                <Text variant="body" className="font-medium">{formatZAR(quote.shipping)}</Text>
-              </View>
-              <View className="flex-row items-center justify-between">
-                <Text variant="body" className="text-muted-foreground">VAT (included)</Text>
-                <Text variant="body" className="font-medium">{formatZAR(quote.tax)}</Text>
-              </View>
-              <View className="mt-2 flex-row items-center justify-between border-t border-border pt-3">
-                <Text variant="heading">Total</Text>
-                <Text variant="heading">{formatZAR(quote.total)}</Text>
-              </View>
-            </View>
-          ) : null}
-        </View>
+        {step === 1 && renderDeliveryStep()}
+        {step === 2 && renderPaymentStep()}
+        {step === 3 && renderReviewStep()}
 
         {/* Bottom padding for fixed button */}
         <View className="h-[100px]" />
       </ScrollView>
 
-      {/* Fixed Place Order Button */}
+      {/* Fixed per-step CTA */}
       <View
         className="absolute inset-x-0 bottom-0 bg-background px-5 pt-4"
         style={{ paddingBottom: insets.bottom, ...FIXED_BAR_SHADOW }}
       >
-        <Button
-          variant="brand"
-          size="lg"
-          loading={placeOrderMutation.isPending}
-          disabled={!canPlaceOrder}
-          onPress={handlePlaceOrder}
-        >
-          {placeOrderMutation.isPending
-            ? 'COMPLETING PURCHASE…'
-            : quote
-              ? `COMPLETE PURCHASE - ${formatZAR(quote.total)}`
-              : 'COMPLETE PURCHASE'}
-        </Button>
+        {renderCta()}
       </View>
     </View>
   );

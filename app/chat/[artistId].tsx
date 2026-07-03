@@ -16,9 +16,11 @@ import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Text } from '@/components/ui/text';
 import { Avatar } from '@/components/ui/avatar';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useThemeColors } from '@/lib/theme';
+import { haptics } from '@/lib/haptics';
 import { imageSource } from '@/lib/image-source';
 import { useAuthStore } from '@/lib/auth-store';
 import {
@@ -39,6 +41,39 @@ function uuid(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+// WhatsApp-style day chips between messages from different days.
+type ChatRow =
+  | { kind: 'day'; id: string; label: string }
+  | { kind: 'msg'; msg: ChatMessage };
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  if (d.toDateString() === new Date(now.getTime() - 86_400_000).toDateString()) {
+    return 'Yesterday';
+  }
+  return d.toLocaleDateString('en-ZA', {
+    day: 'numeric',
+    month: 'long',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
+function withDaySeparators(messages: ChatMessage[]): ChatRow[] {
+  const rows: ChatRow[] = [];
+  let lastDay = '';
+  for (const msg of messages) {
+    const day = new Date(msg.createdAt).toDateString();
+    if (day !== lastDay) {
+      rows.push({ kind: 'day', id: `day-${day}`, label: dayLabel(msg.createdAt) });
+      lastDay = day;
+    }
+    rows.push({ kind: 'msg', msg });
+  }
+  return rows;
 }
 
 export default function ChatScreen() {
@@ -143,6 +178,7 @@ export default function ChatScreen() {
     if ((text.length === 0 && !attachment) || !conversationId) return;
     if (pendingAttachment?.status === 'uploading') return;
 
+    haptics.light();
     const idempotencyKey = uuid();
     const tempId = `local-${idempotencyKey}`;
     const optimistic: ChatMessage = {
@@ -216,7 +252,19 @@ export default function ChatScreen() {
 
   const logoSource = imageSource(conversation?.merchant.logo);
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
+  const renderRow = ({ item: row }: { item: ChatRow }) => {
+    if (row.kind === 'day') {
+      return (
+        <View className="my-3 items-center">
+          <View className="rounded-full bg-muted px-3 py-1">
+            <Text variant="micro" className="font-normal">
+              {row.label}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+    const item = row.msg;
     const isUser = item.sender === 'user';
 
     return (
@@ -281,46 +329,44 @@ export default function ChatScreen() {
 
   if (authStatus !== 'authenticated') {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View
-          className="flex-1 items-center justify-center gap-4 px-10"
-          style={{ paddingTop: insets.top }}
-        >
-          {authStatus === 'loading' ? (
-            <ActivityIndicator size="large" color={colors.mutedForeground} />
-          ) : (
-            <>
-              <Text variant="title" className="text-center">
-                Sign in to chat
+        {authStatus === 'loading' ? (
+          <View className="flex-1 gap-4 px-4 py-6">
+            <Skeleton className="h-10 w-1/2 self-start rounded-[20px] rounded-bl-md" />
+            <Skeleton className="h-16 w-3/5 self-end rounded-[20px] rounded-br-md" />
+            <Skeleton className="h-10 w-2/5 self-start rounded-[20px] rounded-bl-md" />
+          </View>
+        ) : (
+          <EmptyState
+            fill
+            icon="message"
+            title="Sign in to chat"
+            caption="Message brands directly from your YIIVA account."
+          >
+            <Button variant="brand" className="mt-4 px-10" onPress={() => router.push('/auth/login')}>
+              Sign In
+            </Button>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text variant="caption" className="underline">
+                Go back
               </Text>
-              <Text variant="body" className="text-center text-muted-foreground">
-                Message brands directly from your YIIVA account.
-              </Text>
-              <Button className="rounded-full px-10" onPress={() => router.push('/auth/login')}>
-                Sign In
-              </Button>
-              <TouchableOpacity onPress={() => router.back()}>
-                <Text variant="caption" className="underline">
-                  Go back
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+            </TouchableOpacity>
+          </EmptyState>
+        )}
       </View>
     );
   }
 
   if (conversationQuery.isPending) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View
-          className="flex-1 items-center justify-center gap-4 px-10"
-          style={{ paddingTop: insets.top }}
-        >
-          <ActivityIndicator size="large" color={colors.mutedForeground} />
+        <View className="flex-1 gap-4 px-4 py-6">
+          <Skeleton className="h-10 w-1/2 self-start rounded-[20px] rounded-bl-md" />
+          <Skeleton className="h-16 w-3/5 self-end rounded-[20px] rounded-br-md" />
+          <Skeleton className="h-10 w-2/5 self-start rounded-[20px] rounded-bl-md" />
+          <Skeleton className="h-12 w-1/2 self-end rounded-[20px] rounded-br-md" />
         </View>
       </View>
     );
@@ -331,24 +377,23 @@ export default function ChatScreen() {
       conversationQuery.error instanceof APIError &&
       conversationQuery.error.status === 404;
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View
-          className="flex-1 items-center justify-center gap-4 px-10"
-          style={{ paddingTop: insets.top }}
+        <EmptyState
+          fill
+          icon={notFound ? 'questionmark' : 'wifi.slash'}
+          title={notFound ? 'Brand not found' : "Couldn't open the chat"}
         >
-          <Text variant="title" className="text-center">
-            {notFound ? 'Brand not found' : "Couldn't open the chat"}
-          </Text>
           <Button
-            className="rounded-full px-10"
+            variant="brand"
+            className="mt-4 px-10"
             onPress={() =>
               notFound ? router.back() : conversationQuery.refetch()
             }
           >
             {notFound ? 'Go back' : 'Retry'}
           </Button>
-        </View>
+        </EmptyState>
       </View>
     );
   }
@@ -406,20 +451,19 @@ export default function ChatScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
+          data={withDaySeparators(messages)}
+          renderItem={renderRow}
+          keyExtractor={(item) => (item.kind === 'day' ? item.id : item.msg.id)}
           contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           ListEmptyComponent={
-            <View className="items-center px-10 pt-20">
-              <Text variant="caption" className="text-center">
-                Say hi to {merchant.displayName} — ask about sizing, stock or
-                your purchase.
-              </Text>
-            </View>
+            <EmptyState
+              icon="message"
+              title={`Say hi to ${merchant.displayName}`}
+              caption="Ask about sizing, stock or your purchase."
+            />
           }
         />
       )}

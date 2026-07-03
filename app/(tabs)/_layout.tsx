@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
-import { useCartStore } from '@/lib/cart-store';
+import { useCart } from '@/hooks/useCartQueries';
 import { useThemeColors } from '@/lib/theme';
 
 // YIIVA redesign — token-driven tab bar. Ink (foreground) active tint per the
@@ -13,7 +13,9 @@ import { useThemeColors } from '@/lib/theme';
 // blue active tab); muted inactive, filled-on-focus icons, cart-count badge.
 export default function TabLayout() {
   const colors = useThemeColors();
-  const cartCount = useCartStore((s) => s.items.reduce((total, i) => total + i.quantity, 0));
+  // Badge counts the SERVER cart — every cart mutation writes the full cart
+  // back into the ['cart'] cache, so this stays live without extra fetches.
+  const cartCount = useCart().data?.cart.itemCount ?? 0;
 
   return (
     <Tabs
