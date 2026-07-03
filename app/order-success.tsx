@@ -59,17 +59,17 @@ export default function OrderSuccessScreen() {
 
   const handleCancelOrder = () => {
     if (!orderId) return;
-    Alert.alert('Cancel this order?', 'This can’t be undone.', [
-      { text: 'Keep order', style: 'cancel' },
+    Alert.alert('Cancel this purchase?', 'This can’t be undone.', [
+      { text: 'Keep it', style: 'cancel' },
       {
-        text: 'Cancel order',
+        text: 'Cancel purchase',
         style: 'destructive',
         onPress: () =>
           cancelMutation.mutate(
             { orderId, reason: 'CHANGED_MIND' },
             {
               onError: () =>
-                Alert.alert("Couldn't cancel", 'The order may already be processing.'),
+                Alert.alert("Couldn't cancel", 'The purchase may already be processing.'),
             }
           ),
       },
@@ -92,7 +92,7 @@ export default function OrderSuccessScreen() {
           <>
             <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
             <Text variant="title" className="text-center">
-              We couldn&apos;t find that order
+              We couldn&apos;t find that purchase
             </Text>
             <Button variant="brand" className="px-10" onPress={handleContinueShopping}>
               Browse YIIVA
@@ -122,7 +122,7 @@ export default function OrderSuccessScreen() {
           <>
             <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
             <Text variant="title" className="text-center">
-              {notFound ? "We couldn't find that order" : "Couldn't load your order"}
+              {notFound ? "We couldn't find that purchase" : "Couldn't load your purchase"}
             </Text>
             <Button
               variant="brand"
@@ -151,10 +151,10 @@ export default function OrderSuccessScreen() {
             </Text>
             <Text variant="body" className="text-center text-muted-foreground">
               {longWait
-                ? "Still processing. We'll confirm your order shortly — you can keep shopping in the meantime."
+                ? "Still processing. We'll confirm your purchase shortly — you can keep shopping in the meantime."
                 : 'This usually takes a few seconds.'}
             </Text>
-            <Text variant="caption">Order {order.orderNumber}</Text>
+            <Text variant="caption">Purchase {order.orderNumber}</Text>
             {longWait && (
               <Button variant="brand" className="px-10" onPress={handleContinueShopping}>
                 Continue Shopping
@@ -183,12 +183,12 @@ export default function OrderSuccessScreen() {
             />
             <Badge tone={meta.tone}>{meta.label}</Badge>
             <Text variant="title" className="text-center">
-              {failed ? "Payment didn't complete" : 'Order cancelled'}
+              {failed ? "Payment didn't complete" : 'Purchase cancelled'}
             </Text>
             <Text variant="body" className="text-center text-muted-foreground">
               {failed
-                ? 'Your order is unpaid. You can cancel it and try again from your cart.'
-                : `Order ${order.orderNumber} has been cancelled.`}
+                ? 'Your purchase is unpaid. You can cancel it and try again from your cart.'
+                : `Purchase ${order.orderNumber} has been cancelled.`}
             </Text>
             {failed && (
               <Button
@@ -197,7 +197,7 @@ export default function OrderSuccessScreen() {
                 loading={cancelMutation.isPending}
                 onPress={handleCancelOrder}
               >
-                {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
+                {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Purchase'}
               </Button>
             )}
             <Button variant="brand" className="px-10" onPress={handleContinueShopping}>
@@ -224,17 +224,17 @@ export default function OrderSuccessScreen() {
 
           {/* Success Message */}
           <Text variant="title" className="mb-3 text-center">
-            Order Placed Successfully!
+            Purchase Successful!
           </Text>
           <Text variant="body" className="mb-10 text-center text-muted-foreground">
-            Thank you for your order. The brands are getting it ready.
+            Thank you for your purchase. The brands are getting it ready.
           </Text>
 
           {/* Order Details */}
           <View className="mb-8 w-full rounded-xl bg-muted p-5">
             <View className="mb-3 flex-row items-center justify-between">
               <Text variant="body" className="text-muted-foreground">
-                Order Number:
+                Purchase Number:
               </Text>
               <Text variant="label">{order.orderNumber}</Text>
             </View>
@@ -265,7 +265,7 @@ export default function OrderSuccessScreen() {
           {/* Order Items */}
           <View className="mb-8 w-full">
             <Text variant="heading" className="mb-4 text-center">
-              Your Order
+              Your Purchase
             </Text>
             {order.items.map((item) => {
               const imageAsset = imageSource(item.image);
@@ -318,7 +318,7 @@ export default function OrderSuccessScreen() {
             <View className="mb-3 flex-row items-center gap-3">
               <IconSymbol name="hammer" size={20} color={colors.mutedForeground} />
               <Text variant="body" className="flex-1 text-muted-foreground">
-                The brand is preparing your order
+                The brand is preparing your purchase
               </Text>
             </View>
             <View className="mb-3 flex-row items-center gap-3">
@@ -334,7 +334,7 @@ export default function OrderSuccessScreen() {
             <Button variant="brand" className="w-full" onPress={handleTrackOrder}>
               <IconSymbol name="location" size={20} color={colors.brandForeground} />
               <Text variant="label" className="text-brand-foreground">
-                Track Your Order
+                Track Your Purchase
               </Text>
             </Button>
 

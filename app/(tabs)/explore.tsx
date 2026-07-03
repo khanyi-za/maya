@@ -198,11 +198,7 @@ export default function ExploreScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <SideMenu
-        visible={isMenuVisible}
-        onClose={() => setIsMenuVisible(false)}
-        userName="Khanyisomthamo2"
-      />
+      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
       <YiivaHeader
         onMenuPress={handleMenuPress}
         onCartPress={handleCartPress}

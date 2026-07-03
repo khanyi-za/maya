@@ -22,7 +22,7 @@ The buyer app primarily serves the `BUYER` role. Users who become merchants keep
 
 ## Stack
 
-- **Expo SDK 53**, React Native 0.79.5, React 19, New Architecture on (`newArchEnabled: true`)
+- **Expo SDK 54** (upgraded 2026-07-02), React Native 0.81.5, React 19.1, New Architecture on (`newArchEnabled: true`); reanimated 4 + react-native-worklets; NativeWind `^4.2` (the old exact-4.1.23 pin was SDK-53-only and is lifted)
 - **Expo Router** v5 (file-based) with `typedRoutes` experiment
 - **TanStack Query** v5 — provider mounted in `app/_layout.tsx`, mobile-tuned defaults (5min staleTime, 3× exponential retry)
 - **Zustand** v5 + manual `AsyncStorage` persistence (no middleware)
@@ -120,6 +120,10 @@ Each `screens/<n>-<name>/` has:
 
 - **Custom `fetch` wrapper, not axios.** Extend `lib/api-client.ts`. Auth: `lib/api.ts` (planned per auth-mobile-guide.md §3).
 - **Zustand**, not Context or Redux, for client state.
+- **UI vocabulary: "purchase", never "order"** (owner call 2026-07-02 — buyers purchase; merchants order). Display copy only; routes/hooks/types/API fields keep `order*`.
+- **Product imagery is 2:3 portrait** app-wide (ProductCard, rails, EvenGrid, skeletons) via `aspectRatio`, never fixed heights.
+- **Brand logos render via `Avatar variant="logo"`** (contain + padding on an always-white coin) — never cover-cropped like person avatars.
+- **Tab bar active tint is ink**, not brand (owner call 2026-07-02). Brand/Azure is for accents: badges, links, selected chips, CTAs.
 - **No comments unless WHY is non-obvious.** Don't restate what code does.
 - **No emojis in code.** UI emojis only where they're already in the design.
 - **Currency as integer ZAR cents** (per api-conventions.md §Money). `89900` = R899.00. **Pending backend confirmation — see open-questions §CC-2.**
@@ -144,6 +148,7 @@ Each `screens/<n>-<name>/` has:
 - **`expo-video` `VideoView` renders BLACK / zero-sized with `StyleSheet.absoluteFill`** — give it **explicit `width/height: '100%'`** (see the artist/product screens and `ReelCard`/`reels.tsx`). This cost a long debug.
 - **`expo-video` won't play a bare `require()`'d asset number** in Expo Go, AND `Asset.fromModule(mod).uri` (a Metro dev-server URL) doesn't stream reliably on the iOS Simulator either — `.localUri` is null until `downloadAsync()`. Lesson from the reels work: **prefer remote Cloudinary `{uri}` over bundled video assets.** The reels were rebuilt onto `imageSource(url)` (Cloudinary, `vc_h264`) exactly because the bundled-asset path rendered black. Note: `expo-image` *does* accept require numbers; `expo-video` does not. Also `@/`-aliased `require()` doesn't register assets (no babel module-resolver) — use **relative** paths for asset requires.
 - **Adding/removing bundled assets needs a full Metro restart** (`expo start -c`); Fast Refresh won't re-register the asset map.
+- **`useVideoPlayer`'s setup callback runs ONCE at player creation** — driving play/pause/mute there means state changes never reach the player (hero videos didn't autoplay on swipe; mute toggle was dead). Drive playback from a `useEffect` on the live state instead (see `HeroMediaItem` in artist/[artistId] and `MediaItem` in product/[productId]).
 - Push-notification **delivery** can't be tested in Expo Go / the iOS Simulator (no APNs) — emails + the in-app inbox cover it; push needs a dev build on a physical device.
 
 ### New screens (2026-06 mobile build)

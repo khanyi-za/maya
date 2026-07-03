@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
@@ -29,11 +30,13 @@ import { imageSource } from '@/lib/image-source';
 import { formatZAR } from '@/lib/format';
 import type { GenderType, Product } from '@/lib/api-client';
 import {
+  useCategorySearchResults,
   useDebouncedValue,
   useSearchResults,
   useSearchSuggestions,
   useTrackSearch,
 } from '@/hooks/useSearchQueries';
+import { useCategories } from '@/hooks/useHomeQueries';
 import { trackSearch } from '@/lib/api-client';
 
 const RECENT_SEARCHES_KEY = 'recent_searches';
@@ -49,7 +52,9 @@ export default function SearchScreen() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [, setActiveCategory] = useState<string>('All');
+  // Active category-scoped search (browse rail tap). Typing/submitting a text
+  // query clears it — the two result sources are mutually exclusive.
+  const [categorySearch, setCategorySearch] = useState<{ slug: string; label: string } | null>(null);
 
   // Likes stay local-only in v1; bookmarks are server-backed.
   const { toggleLike, isLiked } = useSocialStore();
@@ -65,14 +70,22 @@ export default function SearchScreen() {
   const debouncedQuery = useDebouncedValue(searchQuery, 250);
   const effectiveQuery = (instantQuery ?? debouncedQuery).trim();
 
-  const resultsQuery = useSearchResults(effectiveQuery, gender);
+  // Universal text search is suspended (empty query disables it) while a
+  // category-scoped search is active.
+  const resultsQuery = useSearchResults(categorySearch ? '' : effectiveQuery, gender);
+  const categoryResultsQuery = useCategorySearchResults(categorySearch?.slug ?? null, gender);
+  const activeQuery = categorySearch ? categoryResultsQuery : resultsQuery;
   const suggestionsQuery = useSearchSuggestions();
+  // Real categories for the browse rail (gender-aware, same source as Home).
+  const categoriesQuery = useCategories(gender ?? null);
+  const browseCategories = categoriesQuery.data?.categories ?? [];
 
   const searchResults: Product[] =
-    resultsQuery.data?.pages.flatMap((page) => page.products) ?? [];
+    activeQuery.data?.pages.flatMap((page) => page.products) ?? [];
   const firstPageCount = resultsQuery.data?.pages[0]?.products.length;
+  // Text searches only — the category endpoint tracks itself server-side.
   useTrackSearch(
-    effectiveQuery,
+    categorySearch ? '' : effectiveQuery,
     gender,
     resultsQuery.isSuccess && !resultsQuery.isPlaceholderData ? firstPageCount : undefined
   );
@@ -100,6 +113,7 @@ export default function SearchScreen() {
   const handleTextChange = (query: string) => {
     setSearchQuery(query);
     setInstantQuery(null);
+    setCategorySearch(null);
   };
 
   const handleSubmit = (term: string) => {
@@ -107,9 +121,19 @@ export default function SearchScreen() {
     if (!trimmed) return;
     setSearchQuery(trimmed);
     setInstantQuery(trimmed);
+    setCategorySearch(null);
     saveRecent(trimmed);
   };
 
+  // Explicit way out of search mode — blur alone only exits when the query is
+  // empty, which made leaving results awkward.
+  const handleCancel = () => {
+    Keyboard.dismiss();
+    setSearchQuery('');
+    setInstantQuery(null);
+    setCategorySearch(null);
+    setIsSearchFocused(false);
+  };
   const clearRecentSearch = (index: number) => {
     setRecentSearches((prev) => {
       const next = prev.filter((_, i) => i !== index);
@@ -118,9 +142,25 @@ export default function SearchScreen() {
     });
   };
 
+  const clearAllRecentSearches = () => {
+    setRecentSearches([]);
+    AsyncStorage.removeItem(RECENT_SEARCHES_KEY).catch(() => {});
+  };
+
+  // Tapping a category card runs a CATEGORY-scoped search (precise membership
+  // via /search/category, not a text match). The category's name fills the
+  // field for context. CategoryFilter's reset effect fires
+  // onCategoryChange('All') on mount/tab change — ignore it.
   const handleCategoryChange = useCallback(
-    (category: string) => setActiveCategory(category),
-    []
+    (slug: string) => {
+      if (slug === 'All') return;
+      const cat = categoriesQuery.data?.categories.find((c) => c.slug === slug);
+      const label = cat?.displayName ?? slug;
+      setSearchQuery(label);
+      setInstantQuery(label);
+      setCategorySearch({ slug, label });
+    },
+    [categoriesQuery.data]
   );
 
   const handleBookmark = (product: Product) => {
@@ -144,8 +184,8 @@ export default function SearchScreen() {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     const nearBottom =
       contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
-    if (nearBottom && resultsQuery.hasNextPage && !resultsQuery.isFetchingNextPage) {
-      resultsQuery.fetchNextPage();
+    if (nearBottom && activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
+      activeQuery.fetchNextPage();
     }
   };
 
@@ -154,6 +194,7 @@ export default function SearchScreen() {
       setIsSearchFocused(false);
       setSearchQuery('');
       setInstantQuery(null);
+      setCategorySearch(null);
     }, [])
   );
 
@@ -198,23 +239,23 @@ export default function SearchScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <SideMenu
-        visible={isMenuVisible}
-        onClose={() => setIsMenuVisible(false)}
-        userName="Khanyisomthamo2"
-      />
+      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
       {/* Search Header */}
       <View
         className="flex-row items-center gap-3 border-b border-border bg-background px-5 pb-4"
         style={{ paddingTop: insets.top + 16 }}
       >
-        <TouchableOpacity onPress={() => setIsMenuVisible(true)} className="p-2">
-          <View className="gap-[3px]">
-            <View className="h-0.5 w-5 rounded-sm bg-foreground" />
-            <View className="h-0.5 w-5 rounded-sm bg-foreground" />
-            <View className="h-0.5 w-5 rounded-sm bg-foreground" />
-          </View>
-        </TouchableOpacity>
+        {/* Hamburger hidden while searching to make room for Cancel. */}
+        {!isSearchFocused && !isSearching && (
+          <TouchableOpacity
+            onPress={() => setIsMenuVisible(true)}
+            className="p-2"
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+          >
+            <IconSymbol name="line.3.horizontal" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+        )}
 
         <View className="h-11 flex-1 flex-row items-center rounded-xl bg-muted px-3">
           <IconSymbol
@@ -225,7 +266,7 @@ export default function SearchScreen() {
           />
           <Input
             className="h-full flex-1 border-0 bg-transparent px-0 text-base"
-            placeholder="Search artists, products, locations..."
+            placeholder="Search brands and products…"
             value={searchQuery}
             onChangeText={handleTextChange}
             onSubmitEditing={() => handleSubmit(searchQuery)}
@@ -237,11 +278,24 @@ export default function SearchScreen() {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => handleTextChange('')} className="ml-2">
+            <TouchableOpacity
+              onPress={() => handleTextChange('')}
+              className="ml-2"
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
               <IconSymbol name="xmark.circle.fill" size={20} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
         </View>
+
+        {(isSearchFocused || isSearching) && (
+          <TouchableOpacity onPress={handleCancel} accessibilityRole="button">
+            <Text variant="body" className="text-brand">
+              Cancel
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Browse view (not actively searching): categories ↔ trending on top,
@@ -253,14 +307,24 @@ export default function SearchScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {!isSearchFocused ? (
-            <CategoryFilter onCategoryChange={handleCategoryChange} searchMode={true} />
+            <CategoryFilter
+              onCategoryChange={handleCategoryChange}
+              primaryFilter={activePrimaryFilter}
+              categories={browseCategories}
+              showAll={false}
+            />
           ) : (
             <View className="px-5 pt-4">
               {recentSearches.length > 0 && (
                 <View className="mb-8">
-                  <Text variant="heading" className="mb-4">
-                    Recent Searches
-                  </Text>
+                  <View className="mb-4 flex-row items-center justify-between">
+                    <Text variant="heading">Recent Searches</Text>
+                    <TouchableOpacity onPress={clearAllRecentSearches} accessibilityRole="button">
+                      <Text variant="caption" className="text-brand">
+                        Clear all
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                   {recentSearches.map((search, index) => (
                     <TouchableOpacity
                       key={index}
@@ -317,20 +381,23 @@ export default function SearchScreen() {
           onScroll={handleResultsScroll}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <View className="pt-4">
-            {resultsQuery.isPending ? (
+            {activeQuery.isPending ? (
               <View className="px-3">
                 {[0, 1, 2].map((r) => (
                   <View key={r} className="mb-3 flex-row gap-3">
-                    <Skeleton className="h-72 flex-1 rounded-xl" />
-                    <Skeleton className="h-72 flex-1 rounded-xl" />
+                    <Skeleton className="aspect-[2/3] flex-1 rounded-xl" />
+                    <Skeleton className="aspect-[2/3] flex-1 rounded-xl" />
                   </View>
                 ))}
               </View>
-            ) : resultsQuery.isError ? (
+            ) : activeQuery.isError ? (
               <View className="items-center px-10 pt-[60px]">
-                <IconSymbol name="exclamationmark.triangle" size={48} color={colors.mutedForeground} />
+                <View className="h-16 w-16 items-center justify-center rounded-full bg-muted">
+                  <IconSymbol name="wifi.slash" size={28} color={colors.mutedForeground} />
+                </View>
                 <Text variant="heading" className="mb-2 mt-4">
                   Search failed
                 </Text>
@@ -338,10 +405,10 @@ export default function SearchScreen() {
                   Couldn&apos;t reach YIIVA. Check your connection and try again.
                 </Text>
                 <Button
-                  variant="primary"
+                  variant="brand"
                   size="sm"
-                  className="mt-4"
-                  onPress={() => resultsQuery.refetch()}
+                  className="mt-4 px-8"
+                  onPress={() => activeQuery.refetch()}
                 >
                   Retry
                 </Button>
@@ -350,15 +417,15 @@ export default function SearchScreen() {
               <>
                 <Text variant="body" className="mb-5 px-5 font-medium text-muted-foreground">
                   {searchResults.length}
-                  {resultsQuery.hasNextPage ? '+' : ''} result
-                  {searchResults.length !== 1 || resultsQuery.hasNextPage ? 's' : ''} for &quot;
-                  {effectiveQuery}&quot;
+                  {activeQuery.hasNextPage ? '+' : ''} result
+                  {searchResults.length !== 1 || activeQuery.hasNextPage ? 's' : ''}
+                  {categorySearch ? ` in ${categorySearch.label}` : ` for "${effectiveQuery}"`}
                 </Text>
                 <View
-                  className={cn('pb-[100px]', resultsQuery.isPlaceholderData && 'opacity-50')}
+                  className={cn('pb-[100px]', activeQuery.isPlaceholderData && 'opacity-50')}
                 >
                   {renderResultsGrid()}
-                  {resultsQuery.isFetchingNextPage && (
+                  {activeQuery.isFetchingNextPage && (
                     <ActivityIndicator
                       size="small"
                       color={colors.mutedForeground}
@@ -369,13 +436,30 @@ export default function SearchScreen() {
               </>
             ) : (
               <View className="items-center px-10 pt-[60px]">
-                <IconSymbol name="magnifyingglass" size={48} color={colors.mutedForeground} />
+                <View className="h-16 w-16 items-center justify-center rounded-full bg-muted">
+                  <IconSymbol name="magnifyingglass" size={28} color={colors.mutedForeground} />
+                </View>
                 <Text variant="heading" className="mb-2 mt-4">
                   No results found
                 </Text>
                 <Text variant="caption" className="text-center">
                   Try adjusting your search or browse by category
                 </Text>
+                {trendingTags.length > 0 && (
+                  <View className="mt-5 flex-row flex-wrap justify-center gap-2">
+                    {trendingTags.slice(0, 6).map((tag) => (
+                      <TouchableOpacity
+                        key={tag}
+                        className="rounded-2xl bg-muted px-3 py-1.5"
+                        onPress={() => handleSubmit(tag.replace(/^#/, ''))}
+                      >
+                        <Text variant="caption" className="text-sm">
+                          {tag}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </View>

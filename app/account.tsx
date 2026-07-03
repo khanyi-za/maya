@@ -52,7 +52,7 @@ export default function AccountScreen() {
             Sign in to your account
           </Text>
           <Text variant="body" className="mb-6 text-center text-muted-foreground">
-            Manage your profile, addresses, and orders
+            Manage your profile, addresses, and purchases
           </Text>
           <Button variant="brand" className="px-12" onPress={() => router.push('/auth/login')}>
             Sign In
@@ -96,11 +96,11 @@ export default function AccountScreen() {
 
         {/* Orders */}
         <Text variant="micro" className="mb-2 mt-4 px-5 uppercase tracking-wide">
-          My orders
+          My purchases
         </Text>
         <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/orders')}>
           <Card className="mx-5 flex-row items-center justify-between px-4 py-4">
-            <Text variant="body">Order history</Text>
+            <Text variant="body">Purchase history</Text>
             <IconSymbol name="chevron.right" size={20} color={colors.mutedForeground} />
           </Card>
         </TouchableOpacity>

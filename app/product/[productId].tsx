@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Share,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -30,6 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useThemeColors } from '@/lib/theme';
 import { haptics } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
+import { RowProductList } from '@/components/RowProductList';
 
 const { width } = Dimensions.get('window');
 
@@ -91,6 +93,7 @@ function MediaItem({
         source={source}
         style={MEDIA_FILL}
         contentFit="cover"
+        transition={200}
       />
     );
   }
@@ -259,29 +262,41 @@ export default function ProductScreen() {
           />
         }
       >
-        {/* Hero Media Carousel */}
+        {/* Hero Media Carousel. Floating chrome sits on fixed white coins over
+            media, so icon color stays ink in both themes. */}
         <View className="relative" style={{ height: width * 1.3 + insets.top }}>
           <TouchableOpacity
             className="absolute left-4 w-10 h-10 rounded-full bg-white/90 items-center justify-center z-10"
             style={{ top: insets.top + 16 }}
             onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
           >
-            <Text className="text-2xl text-black">←</Text>
+            <IconSymbol name="chevron.left" size={20} color="#18181b" />
           </TouchableOpacity>
 
           <TouchableOpacity
             className="absolute right-[72px] w-10 h-10 rounded-full bg-white/90 items-center justify-center z-10"
             style={{ top: insets.top + 16 }}
+            onPress={() =>
+              void Share.share({
+                message: `${product.name} by ${product.merchant.displayName} on YIIVA — ${formatZAR(product.price)}`,
+              }).catch(() => {})
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Share"
           >
-            <Text className="text-xl text-black">↗</Text>
+            <IconSymbol name="square.and.arrow.up" size={18} color="#18181b" />
           </TouchableOpacity>
 
           <TouchableOpacity
             className="absolute right-4 w-10 h-10 rounded-full bg-white/90 items-center justify-center z-10"
             style={{ top: insets.top + 16 }}
             onPress={() => router.push('/cart')}
+            accessibilityRole="button"
+            accessibilityLabel="Cart"
           >
-            <Text className="text-xl">🛒</Text>
+            <IconSymbol name="cart" size={18} color="#18181b" />
           </TouchableOpacity>
 
           <ScrollView
@@ -305,26 +320,30 @@ export default function ProductScreen() {
             ))}
           </ScrollView>
 
-          <View className="absolute bottom-20 left-4 bg-white px-3 py-1.5 rounded">
-            <Text className="text-xs font-semibold text-black">TAP TO ZOOM</Text>
-          </View>
-
           <TouchableOpacity
             className="absolute bottom-20 right-4 w-14 h-14 rounded-full bg-white items-center justify-center"
-            onPress={() => toggleLike(product.id)}
+            onPress={() => {
+              haptics.light();
+              toggleLike(product.id);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={liked ? 'Unlike' : 'Like'}
           >
-            <Text style={{ fontSize: 28, color: liked ? colors.like : undefined }}>
-              {liked ? '♥' : '♡'}
-            </Text>
+            <IconSymbol
+              name={liked ? 'heart.fill' : 'heart'}
+              size={26}
+              color={liked ? colors.like : '#18181b'}
+            />
           </TouchableOpacity>
 
+          {/* Active dot stretches to a pill. */}
           <View className="absolute bottom-[50px] left-0 right-0 flex-row justify-center gap-1.5">
             {product.media.map((_, index) => (
               <View
                 key={index}
                 className={cn(
-                  'w-1.5 h-1.5 rounded-full',
-                  index === currentMediaIndex ? 'bg-white' : 'bg-white/40',
+                  'h-1.5 rounded-full',
+                  index === currentMediaIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/40',
                 )}
               />
             ))}
@@ -334,14 +353,15 @@ export default function ProductScreen() {
         {/* Product Info */}
         <View className="px-4">
           <View className="py-4 border-b border-border">
-            <View className="flex-row justify-between items-start mb-1">
-              <Text variant="heading" className="flex-1 mr-2">{product.name}</Text>
-              <TouchableOpacity>
-                <Text variant="caption" className="text-brand">MORE →</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={() => router.push(`/artist/${product.merchant.username}`)}>
-              <Text variant="caption" className="italic">By {product.merchant.displayName}</Text>
+            <Text variant="heading" className="mb-1">{product.name}</Text>
+            <TouchableOpacity
+              onPress={() => router.push(`/artist/${product.merchant.username}`)}
+              className="flex-row items-center gap-1 self-start"
+            >
+              <Text variant="caption" className="italic">
+                By <Text variant="caption" className="italic text-brand">{product.merchant.displayName}</Text>
+              </Text>
+              <IconSymbol name="chevron.right" size={10} color={colors.mutedForeground} />
             </TouchableOpacity>
           </View>
 
@@ -352,42 +372,40 @@ export default function ProductScreen() {
             </View>
           ) : null}
 
-          {/* Payment Options */}
+          {/* Payment Options (informational — dead "3 OPTIONS" CTA removed) */}
           <View className="py-4 border-b border-border">
-            <View className="flex-row justify-between items-center mb-2">
-              <Text variant="label">Get it now, pay later</Text>
-              <Text variant="caption" className="text-brand">3 OPTIONS →</Text>
-            </View>
+            <Text variant="label" className="mb-2">Get it now, pay later</Text>
             <Text variant="caption">
               Pay using our credit options, Payflex, PayJustNow, Mobicred or RCS.
             </Text>
           </View>
 
-          {/* Size Selector */}
+          {/* Size Selector (dead SIZE INFO / FIND YOUR FIT CTAs removed) */}
           {variants.length > 0 && (
             <View className="py-4 border-b border-border">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text variant="label">Select a size</Text>
-                <TouchableOpacity>
-                  <Text variant="caption" className="text-brand">SIZE INFO →</Text>
-                </TouchableOpacity>
-              </View>
+              <Text variant="label" className="mb-4">Select a size</Text>
 
-              <View className="flex-row flex-wrap gap-3 mb-4">
+              <View className="flex-row flex-wrap gap-3">
                 {variants.map((variant) => {
                   const isSelected = selectedVariantId === variant.id;
                   return (
                     <TouchableOpacity
                       key={variant.id}
                       className={cn(
-                        'px-6 py-3 rounded-full',
+                        'px-6 py-3 rounded-full active:scale-95',
                         isSelected
                           ? 'border-2 border-brand bg-brand-subtle'
                           : 'border border-border',
                         !variant.available && 'bg-muted border-border',
                       )}
-                      onPress={() => variant.available && setSelectedVariantId(variant.id)}
+                      onPress={() => {
+                        if (!variant.available) return;
+                        haptics.light();
+                        setSelectedVariantId(variant.id);
+                      }}
                       disabled={!variant.available}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Size ${variant.size}${variant.available ? '' : ', sold out'}`}
                     >
                       <Text
                         variant="label"
@@ -402,35 +420,29 @@ export default function ProductScreen() {
                   );
                 })}
               </View>
-
-              <TouchableOpacity className="flex-row items-center py-3">
-                <Text className="text-xl mr-2">📏</Text>
-                <Text variant="label" className="text-brand">FIND YOUR FIT →</Text>
-              </TouchableOpacity>
             </View>
           )}
 
-          {/* Shipping */}
+          {/* Shipping (dead "When will I get it?" CTA removed) */}
           <View className="py-4 border-b border-border">
-            <View className="flex-row justify-between items-center mb-4">
-              <Text variant="label">Shipping</Text>
-              <TouchableOpacity>
-                <Text variant="caption" className="text-brand">When will I get it? →</Text>
-              </TouchableOpacity>
-            </View>
+            <Text variant="label" className="mb-4">Shipping</Text>
 
-            <View className="flex-row mb-4">
-              <Text className="text-2xl mr-3">🚚</Text>
+            <View className="flex-row items-center mb-4">
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-muted">
+                <IconSymbol name="shippingbox" size={17} color={colors.foreground} />
+              </View>
               <View className="flex-1">
-                <Text variant="body" className="font-medium mb-0.5">FREE Standard delivery on orders over R650.</Text>
+                <Text variant="body" className="font-medium mb-0.5">FREE Standard delivery on purchases over R650.</Text>
                 <Text variant="caption">Faster options available.</Text>
               </View>
             </View>
 
-            <View className="flex-row mb-4">
-              <Text className="text-2xl mr-3">🏪</Text>
+            <View className="flex-row items-center">
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-muted">
+                <IconSymbol name="storefront" size={17} color={colors.foreground} />
+              </View>
               <View className="flex-1">
-                <Text variant="body" className="font-medium mb-0.5">FREE Collection on orders over R650.</Text>
+                <Text variant="body" className="font-medium mb-0.5">FREE Collection on purchases over R650.</Text>
                 <Text variant="caption">Open 7 days a week.</Text>
               </View>
             </View>
@@ -442,46 +454,27 @@ export default function ProductScreen() {
             <Text variant="caption">{product.returnPolicy.displayText}</Text>
           </View>
 
-          {/* Similar Items — hidden entirely if the call fails or is empty */}
-          {similarProducts.length > 0 && (
-            <View className="py-4">
-              <Text variant="heading" className="mb-4">Similar Items</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {similarProducts.map((item) => {
-                  const source = imageSource(item.image);
-
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      className="w-[200px] mr-3"
-                      onPress={() => router.push(`/product/${item.id}`)}
-                    >
-                      {source ? (
-                        <Image
-                          source={source}
-                          style={{ width: 200, height: 280 }}
-                          className="rounded-lg mb-2 bg-muted"
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View
-                          className="rounded-lg mb-2 bg-muted items-center justify-center"
-                          style={{ width: 200, height: 280 }}
-                        >
-                          <Text variant="caption">No image</Text>
-                        </View>
-                      )}
-                      <Text variant="caption" className="italic mb-1">By {item.merchant.displayName}</Text>
-                      <Text variant="label" className="font-semibold text-foreground">{formatZAR(item.price)}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
-
-          <View className="h-20" />
         </View>
+
+        {/* Similar Items — the shared rail (same look as Home's New Arrivals);
+            hidden entirely if the call fails or is empty. Sits outside the px-4
+            wrapper because the rail owns its own full-bleed section styling. */}
+        {similarProducts.length > 0 && (
+          <View className="mt-2">
+            <RowProductList
+              title="Similar Items"
+              products={similarProducts.map((item) => ({
+                id: item.id,
+                image: imageSource(item.image),
+                title: item.name,
+                artistName: item.merchant.displayName,
+                price: formatZAR(item.price),
+              }))}
+            />
+          </View>
+        )}
+
+        <View className="h-20" />
       </ScrollView>
 
       {/* Fixed Bottom Bar */}
@@ -497,7 +490,7 @@ export default function ProductScreen() {
           disabled={soldOut || addItem.isPending}
           onPress={handleAddToCart}
         >
-          {soldOut ? 'Sold out' : addItem.isPending ? 'Adding…' : '🛒  Add to cart'}
+          {soldOut ? 'Sold out' : addItem.isPending ? 'Adding…' : 'Add to cart'}
         </Button>
       </View>
     </View>

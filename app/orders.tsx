@@ -82,10 +82,10 @@ export default function OrdersScreen() {
         <View className="flex-1 items-center justify-center px-8">
           <IconSymbol name="bag" size={72} color={colors.mutedForeground} />
           <Text variant="title" className="mb-2 mt-6 text-center">
-            Sign in to see your orders
+            Sign in to see your purchases
           </Text>
           <Text variant="body" className="mb-6 text-center text-muted-foreground">
-            Your order history lives in your YIIVA account
+            Your purchase history lives in your YIIVA account
           </Text>
           <Button variant="brand" className="px-10" onPress={() => router.push('/auth/login')}>
             Sign In
@@ -103,7 +103,7 @@ export default function OrdersScreen() {
         <View className="flex-1 items-center justify-center gap-4 px-8">
           <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
           <Text variant="title" className="text-center">
-            Couldn&apos;t load your orders
+            Couldn&apos;t load your purchases
           </Text>
           <Button variant="brand" className="px-10" onPress={() => ordersQuery.refetch()}>
             Retry
@@ -117,10 +117,10 @@ export default function OrdersScreen() {
         <View className="flex-1 items-center justify-center px-8">
           <IconSymbol name="bag" size={72} color={colors.mutedForeground} />
           <Text variant="title" className="mb-2 mt-6 text-center">
-            No orders yet
+            No purchases yet
           </Text>
           <Text variant="body" className="mb-6 text-center text-muted-foreground">
-            When you check out, your orders will appear here.
+            When you check out, your purchases will appear here.
           </Text>
           <Button variant="brand" className="px-10" onPress={() => router.replace('/(tabs)')}>
             Start shopping
@@ -177,7 +177,7 @@ export default function OrdersScreen() {
         <TouchableOpacity onPress={() => router.back()} className="p-2">
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text variant="heading">My orders</Text>
+        <Text variant="heading">My purchases</Text>
         <View className="w-10" />
       </View>
 
@@ -224,7 +224,7 @@ function OrderCard({
           </View>
 
           <Text variant="caption" className="mt-0.5">
-            Order #{order.orderNumber}
+            Purchase #{order.orderNumber}
           </Text>
 
           <View className="mt-1.5 flex-row items-end justify-between gap-2">

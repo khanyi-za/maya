@@ -184,13 +184,13 @@ Today it's fake (StatusBar hardcoded light, screens hardcoded `#fff`). Fix:
   **All validated in the Phase 0 spike** (plan §10) — the app bundles cleanly
   (`expo export -p ios` succeeded on SDK 53 / RN 0.79 / New Arch).
 
-### ⚠️ Version pin (Phase 0 finding — do NOT bump)
-- **`nativewind` is pinned EXACTLY to `4.1.23`** (not `^`). NativeWind **4.2.x**
-  ships `react-native-css-interop 0.2.x`, whose babel requires
-  `react-native-worklets/plugin` — that package needs **RN 0.83+**, but maya is on
-  RN 0.79 (SDK 53), so 4.2.x **breaks the bundle** (`Cannot find module
-  'react-native-worklets/plugin'`). The 4.1.x line (css-interop `0.1.22`) uses the
-  reanimated plugin and works. Revisit only when maya moves to Expo SDK 54+ /
-  reanimated 4.
-- `tailwindcss` on the **v3** line (`^3.4.x`) — NativeWind v4 is built on Tailwind
-  v3, NOT v4 (athena web uses v4; they diverge here intentionally).
+### Version notes
+- **SUPERSEDED (2026-07-02, SDK 54 upgrade):** the old exact `nativewind@4.1.23`
+  pin applied only while maya was on SDK 53 / RN 0.79 (no `react-native-worklets`).
+  maya is now on **Expo SDK 54 / RN 0.81 / reanimated 4 + react-native-worklets**,
+  and `nativewind` is on **`^4.2`** (css-interop 0.2.x, worklets-based babel) —
+  verified bundling cleanly via `expo export -p ios`.
+- `tailwindcss` stays on the **v3** line (`^3.4.x`) — NativeWind v4 is built on
+  Tailwind v3, NOT v4 (athena web uses v4; they diverge here intentionally).
+- `babel-preset-expo` is now an explicit devDependency — SDK 54 no longer hoists
+  it, and our custom `babel.config.js` references it by name.

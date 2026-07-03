@@ -30,6 +30,7 @@ import { resolveFollowed, useServerSocial } from '@/lib/server-social';
 import { useRequireAuth, useToggleFollow } from '@/hooks/useSocialMutations';
 import { imageSource } from '@/lib/image-source';
 import { formatZAR } from '@/lib/format';
+import { haptics } from '@/lib/haptics';
 import { APIError } from '@/lib/api-client';
 import {
   useMerchantProfile,
@@ -59,17 +60,31 @@ function HeroMediaItem({
     media.type === 'video' ? media.source : null,
     (player) => {
       player.loop = true;
-      player.muted = isVideoMuted;
-      if (index === currentMediaIndex) {
-        player.play();
-      }
     }
   );
+
+  // Drive play/pause + mute from live state — the setup callback only runs at
+  // player creation, which is why videos past the cover never autoplayed on
+  // swipe (and the mute toggle didn't reach existing players).
+  React.useEffect(() => {
+    if (media.type !== 'video') return;
+    videoPlayer.muted = isVideoMuted;
+    if (index === currentMediaIndex) {
+      videoPlayer.play();
+    } else {
+      videoPlayer.pause();
+    }
+  }, [currentMediaIndex, isVideoMuted, index, media.type, videoPlayer]);
 
   return (
     <View className="h-full" style={{ width: screenWidth }}>
       {media.type === 'image' ? (
-        <Image source={media.source} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+        <Image
+          source={media.source}
+          style={{ width: '100%', height: '100%' }}
+          contentFit="cover"
+          transition={200}
+        />
       ) : (
         <VideoView
           player={videoPlayer}
@@ -138,6 +153,7 @@ export default function ArtistProfileScreen() {
 
   const handleFollow = () => {
     if (!merchant || !requireAuth()) return;
+    haptics.light();
     toggleFollow(
       merchant.id,
       resolveFollowed(followed, merchant.id, merchant.isFollowedByMe)
@@ -200,7 +216,7 @@ export default function ArtistProfileScreen() {
         {/* Product grid */}
         <View className="flex-row flex-wrap justify-between px-4 mt-8 gap-y-4">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="w-[48%] aspect-square rounded-lg" />
+            <Skeleton key={i} className="w-[48%] aspect-[2/3] rounded-lg" />
           ))}
         </View>
       </View>
@@ -403,6 +419,7 @@ export default function ArtistProfileScreen() {
               uri={merchant.logo}
               fallback={merchant.displayName?.charAt(0)}
               size={80}
+              variant="logo"
               className="border-4 border-background"
             />
           </View>
@@ -414,7 +431,7 @@ export default function ArtistProfileScreen() {
                   key={index}
                   className={
                     index === currentMediaIndex
-                      ? 'w-2 h-2 rounded-full bg-white'
+                      ? 'w-5 h-2 rounded-full bg-white'
                       : 'w-2 h-2 rounded-full bg-white/50'
                   }
                 />
@@ -479,14 +496,17 @@ export default function ArtistProfileScreen() {
                     key={category}
                     className={
                       selected
-                        ? 'px-4 py-2 rounded-sm border-b-2 border-foreground'
-                        : 'px-4 py-2 rounded-sm bg-muted border-b-2 border-transparent'
+                        ? 'rounded-full border border-brand bg-brand-subtle px-4 py-2'
+                        : 'rounded-full border border-border px-4 py-2'
                     }
-                    onPress={() => setSelectedCategory(category)}
+                    onPress={() => {
+                      haptics.light();
+                      setSelectedCategory(category);
+                    }}
                   >
                     <Text
                       variant="caption"
-                      className={selected ? 'text-foreground font-semibold' : ''}
+                      className={selected ? 'font-semibold text-brand' : 'text-foreground'}
                     >
                       {category === 'All'
                         ? 'All'
@@ -503,7 +523,7 @@ export default function ArtistProfileScreen() {
         {productsQuery.isPending ? (
           <View className="flex-row flex-wrap justify-between px-4 gap-y-4">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="w-[48%] aspect-square rounded-lg" />
+              <Skeleton key={i} className="w-[48%] aspect-[2/3] rounded-lg" />
             ))}
           </View>
         ) : productsQuery.isError ? (

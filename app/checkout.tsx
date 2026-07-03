@@ -138,7 +138,7 @@ export default function CheckoutScreen() {
               { text: 'OK', onPress: () => router.back() },
             ]);
           } else {
-            Alert.alert("Couldn't place your order", 'Please try again.');
+            Alert.alert("Couldn't complete your purchase", 'Please try again.');
           }
         },
       }
@@ -373,7 +373,7 @@ export default function CheckoutScreen() {
           <View className="mx-5 mt-4 gap-2 rounded-[10px] bg-danger-subtle p-3.5">
             <Text variant="body" className="text-danger">
               An item in your cart is no longer available. Remove it before
-              placing your order.
+              completing your purchase.
             </Text>
             <TouchableOpacity onPress={() => router.back()}>
               <Text variant="label" className="text-danger underline">
@@ -383,10 +383,10 @@ export default function CheckoutScreen() {
           </View>
         )}
 
-        {/* Order Summary */}
+        {/* Purchase Summary */}
         <View className="border-b border-border px-5 py-5">
           <Text variant="heading" className="mb-4">
-            Order Summary
+            Purchase Summary
           </Text>
           {cartQuery.isPending ? (
             <ActivityIndicator size="small" color={colors.mutedForeground} />
@@ -504,10 +504,10 @@ export default function CheckoutScreen() {
           </Card>
         </View>
 
-        {/* Order Total — server quote, VAT-inclusive */}
+        {/* Purchase Total — server quote, VAT-inclusive */}
         <View className="border-b border-border px-5 py-5">
           <Text variant="heading" className="mb-4">
-            Order Total
+            Purchase Total
           </Text>
           {!selectedAddress ? (
             <Text variant="caption" className="mb-2">
@@ -567,10 +567,10 @@ export default function CheckoutScreen() {
           onPress={handlePlaceOrder}
         >
           {placeOrderMutation.isPending
-            ? 'PLACING ORDER…'
+            ? 'COMPLETING PURCHASE…'
             : quote
-              ? `PLACE ORDER - ${formatZAR(quote.total)}`
-              : 'PLACE ORDER'}
+              ? `COMPLETE PURCHASE - ${formatZAR(quote.total)}`
+              : 'COMPLETE PURCHASE'}
         </Button>
       </View>
     </View>

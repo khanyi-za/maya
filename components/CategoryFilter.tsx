@@ -5,6 +5,7 @@ import { Text } from './ui/text';
 import { cn } from '@/lib/utils';
 import { getLocalAsset } from '@/lib/local-assets';
 import { imageSource } from '@/lib/image-source';
+import { haptics } from '@/lib/haptics';
 import type { Category } from '@/lib/api-client';
 
 interface CategoryFilterProps {
@@ -12,6 +13,8 @@ interface CategoryFilterProps {
   primaryFilter?: 'men' | 'women' | 'home-lifestyle';
   searchMode?: boolean;
   categories?: Category[];
+  /** Hide the synthetic "All" chip (e.g. Search, where "All" is meaningless). */
+  showAll?: boolean;
 }
 
 // TODO: Replace with actual category-specific images
@@ -43,11 +46,12 @@ interface Chip {
   image: any;
 }
 
-export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false, categories }: CategoryFilterProps) {
+export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false, categories, showAll = true }: CategoryFilterProps) {
   const [selectedValue, setSelectedValue] = useState('All');
   const apiDriven = categories !== undefined;
 
   const handleCategoryPress = (value: string) => {
+    haptics.light();
     setSelectedValue(value);
     onCategoryChange(value);
   };
@@ -61,7 +65,9 @@ export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', search
   if (apiDriven) {
     if (categories.length === 0) return null;
     chips = [
-      { value: 'All', label: 'All', image: getLocalAsset(getCategoryImage('All', primaryFilter)) },
+      ...(showAll
+        ? [{ value: 'All', label: 'All', image: getLocalAsset(getCategoryImage('All', primaryFilter)) }]
+        : []),
       ...categories.map((c) => ({ value: c.slug, label: c.displayName, image: imageSource(c.image) })),
     ];
   } else {
@@ -86,18 +92,19 @@ export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', search
           return (
             <TouchableOpacity
               key={chip.value}
-              className="relative h-[120px] w-[100px] overflow-hidden rounded-xl"
+              className="relative h-[190px] w-[145px] overflow-hidden rounded-xl"
               onPress={() => handleCategoryPress(chip.value)}
               activeOpacity={0.9}
             >
               {chip.image ? (
-                <Image source={chip.image} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                <Image source={chip.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
               ) : (
-                <View className="h-full w-full bg-[#1a1a1a]" />
+                <View className="h-full w-full bg-muted" />
               )}
-              <View className="absolute bottom-0 left-0 right-0 items-center justify-center bg-black/50 px-2 py-2">
+              {/* Dark scrim over imagery — intentional in both themes (white label on media). */}
+              <View className="absolute bottom-0 left-0 right-0 items-center justify-center bg-black/40 px-2 py-2">
                 <Text
-                  className={cn('text-center text-[12px] text-white', selected ? 'font-bold' : 'font-semibold')}
+                  className={cn('text-center text-[13px] text-white', selected ? 'font-bold' : 'font-semibold')}
                   numberOfLines={1}
                 >
                   {chip.label}

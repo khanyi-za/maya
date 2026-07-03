@@ -26,8 +26,7 @@
         "foregroundImage": "./assets/images/ICON_BLACK.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": true
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "bundler": "metro",

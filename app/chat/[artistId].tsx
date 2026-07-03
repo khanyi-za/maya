@@ -373,6 +373,7 @@ export default function ChatScreen() {
             uri={merchant.logo}
             fallback={merchant.displayName?.charAt(0)}
             size={36}
+            variant="logo"
           />
           <View className="flex-1">
             <Text variant="heading">{merchant.displayName}</Text>
@@ -416,7 +417,7 @@ export default function ChatScreen() {
             <View className="items-center px-10 pt-20">
               <Text variant="caption" className="text-center">
                 Say hi to {merchant.displayName} — ask about sizing, stock or
-                your order.
+                your purchase.
               </Text>
             </View>
           }

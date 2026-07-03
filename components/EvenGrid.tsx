@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { TouchableOpacity, View, Dimensions } from 'react-native';
 import { Text } from './ui/text';
-import { IconSymbol } from './ui/IconSymbol';
 import { useThemeColors } from '@/lib/theme';
 
 interface GridItem {
@@ -39,13 +38,16 @@ export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridPro
     >
       <Image
         source={item.image}
+        // 2:3 portrait — matches ProductCard/rail proportions app-wide.
         style={{
           width: '100%',
-          height: 220,
-          borderRadius: 8,
+          aspectRatio: 2 / 3,
+          borderRadius: 12,
           marginBottom: 8,
           backgroundColor: colors.muted,
         }}
+        contentFit="cover"
+        transition={200}
       />
       <View className="px-1">
         <Text variant="caption" numberOfLines={2} className="mb-1 font-semibold text-foreground">
@@ -56,12 +58,9 @@ export function EvenGrid({ data, onItemPress, ListHeaderComponent }: EvenGridPro
             By {item.brand}
           </Text>
         )}
-        <View className="flex-row items-center justify-between">
-          <Text className="text-sm font-semibold text-foreground">{item.price}</Text>
-          <TouchableOpacity className="p-1">
-            <IconSymbol name="heart" size={18} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        </View>
+        <Text variant="label" className="text-[14px]">
+          {item.price}
+        </Text>
       </View>
     </TouchableOpacity>
   );

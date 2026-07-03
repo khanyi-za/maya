@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   getSearchSuggestions,
+  searchByCategory,
   searchProducts,
   trackSearch,
   type GenderType,
@@ -33,6 +34,24 @@ export function useSearchResults(query: string, gender?: GenderType) {
     gcTime: 5 * 60 * 1000,
     enabled: query.trim().length >= 1,
     // Keep the previous results rendered (faded) while the next query loads.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Category-scoped results (GET /api/search/category) — precise membership, not
+ * a text match. Drives the Search browse rail's category taps.
+ */
+export function useCategorySearchResults(categorySlug: string | null, gender?: GenderType) {
+  return useInfiniteQuery({
+    queryKey: ['search', 'category', categorySlug, gender ?? 'all'],
+    queryFn: ({ pageParam }) =>
+      searchByCategory({ category: categorySlug!, genderType: gender, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    enabled: !!categorySlug,
     placeholderData: keepPreviousData,
   });
 }

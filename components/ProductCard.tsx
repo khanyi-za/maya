@@ -26,8 +26,7 @@ interface ProductCardProps {
 }
 
 // YIIVA redesign — token-driven card, type-scale text, animated (press-scale)
-// like/bookmark, token icon colors (like = the shared like token, not #ff0000).
-// Kills the old negative-margin spacing hacks + unloaded font families.
+// like/bookmark, token icon colors. Memoized: rendered in long feed grids.
 const CARD_SHADOW = {
   shadowColor: '#000',
   shadowOffset: { width: 0, height: 2 },
@@ -36,7 +35,7 @@ const CARD_SHADOW = {
   elevation: 2,
 };
 
-export function ProductCard({
+export const ProductCard = React.memo(function ProductCard({
   productImage,
   artistName,
   productTitle,
@@ -66,15 +65,24 @@ export function ProductCard({
 
   return (
     <View
-      className="mb-5 w-[97%] self-center overflow-hidden rounded-lg border border-border bg-card"
+      className="mb-5 w-full overflow-hidden rounded-lg border border-border bg-card"
       style={CARD_SHADOW}
     >
-      <TouchableOpacity onPress={handleProductPress} activeOpacity={0.9}>
+      <Pressable
+        onPress={handleProductPress}
+        className="active:opacity-90"
+        accessibilityRole="button"
+        accessibilityLabel={`${productTitle} by ${artistName}, ${price}`}
+      >
         <Image
           source={productImage}
-          style={{ width: '100%', height: 370, backgroundColor: colors.muted }}
+          // 2:3 portrait (owner call 2026-07-02) — adapts to column width,
+          // replacing the fixed 370px that overshot ~1:2 on phone grids.
+          style={{ width: '100%', aspectRatio: 2 / 3, backgroundColor: colors.muted }}
+          contentFit="cover"
+          transition={200}
         />
-      </TouchableOpacity>
+      </Pressable>
 
       <View className="gap-1 px-3 pb-2.5 pt-2">
         <Text variant="label" numberOfLines={1}>
@@ -98,6 +106,8 @@ export function ProductCard({
                 onBookmark?.();
               }}
               className="p-1.5 active:scale-90"
+              accessibilityRole="button"
+              accessibilityLabel={isBookmarked ? 'Remove from wishlist' : 'Save to wishlist'}
             >
               <IconSymbol
                 name={isBookmarked ? 'bookmark.fill' : 'bookmark'}
@@ -111,6 +121,8 @@ export function ProductCard({
                 onLike?.();
               }}
               className="p-1.5 active:scale-90"
+              accessibilityRole="button"
+              accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
             >
               <IconSymbol
                 name={isLiked ? 'heart.fill' : 'heart'}
@@ -125,4 +137,4 @@ export function ProductCard({
       </View>
     </View>
   );
-}
+});

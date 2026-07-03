@@ -10,24 +10,35 @@ import { REELS } from '@/lib/reels-fixtures';
  * Search screen's browse scroll view, below the categories / trending row.
  */
 export function ReelsGrid() {
-  const rows: (typeof REELS)[] = [];
-  for (let i = 0; i < REELS.length; i += 2) {
-    rows.push(REELS.slice(i, i + 2));
-  }
+  // Two independent columns (not aligned rows): the right column's first cell
+  // is shorter, so the columns offset and the whole grid "runs" — the
+  // staggered mosaic look. Original indices are preserved for the full-screen
+  // feed's start position.
+  const left: { reel: (typeof REELS)[number]; index: number }[] = [];
+  const right: typeof left = [];
+  REELS.forEach((reel, index) => {
+    (index % 2 === 0 ? left : right).push({ reel, index });
+  });
 
   return (
-    <View className="px-5 pb-[100px] pt-2">
-      <Text variant="heading" className="mb-4">
+    // Tight mosaic gutters (6px) + a slightly wider grid than the text sections
+    // — reads as a media wall rather than spaced-out cards.
+    <View className="px-3 pb-[100px] pt-2">
+      <Text variant="heading" className="mb-3 px-2">
         Discover
       </Text>
-      {rows.map((row, rowIndex) => (
-        <View key={`reel-row-${rowIndex}`} className="mb-3 flex-row gap-3">
-          {row.map((reel, colIndex) => (
-            <ReelCard key={reel.id} reel={reel} index={rowIndex * 2 + colIndex} />
+      <View className="flex-row items-start gap-1.5">
+        <View className="flex-1 gap-1.5">
+          {left.map(({ reel, index }) => (
+            <ReelCard key={reel.id} reel={reel} index={index} />
           ))}
-          {row.length === 1 && <View className="flex-1" />}
         </View>
-      ))}
+        <View className="flex-1 gap-1.5">
+          {right.map(({ reel, index }, i) => (
+            <ReelCard key={reel.id} reel={reel} index={index} size={i === 0 ? 'short' : 'tall'} />
+          ))}
+        </View>
+      </View>
     </View>
   );
 }

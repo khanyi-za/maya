@@ -118,7 +118,7 @@ export default function NotificationsScreen() {
             No notifications yet
           </Text>
           <Text variant="body" className="text-center text-muted-foreground">
-            Order updates and confirmations will show up here.
+            Purchase updates and confirmations will show up here.
           </Text>
         </View>
       );

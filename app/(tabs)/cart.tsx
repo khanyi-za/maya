@@ -227,7 +227,7 @@ export default function CartScreen() {
           {/* Order summary */}
           <View className="mt-2 bg-muted px-5 py-5">
             <Text variant="heading" className="mb-4">
-              Order Summary
+              Purchase Summary
             </Text>
             <View className="mb-3 flex-row items-center justify-between">
               <Text variant="body" className="text-muted-foreground">

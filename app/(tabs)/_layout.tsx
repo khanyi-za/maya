@@ -8,8 +8,9 @@ import TabBarBackground from '@/components/ui/TabBarBackground';
 import { useCartStore } from '@/lib/cart-store';
 import { useThemeColors } from '@/lib/theme';
 
-// YIIVA redesign — token-driven tab bar. Brand (Azure) active tint, muted
-// inactive, unified filled-on-focus icons, live cart-count badge.
+// YIIVA redesign — token-driven tab bar. Ink (foreground) active tint per the
+// "primary stays ink, brand is for accents" rule (owner call 2026-07-02: no
+// blue active tab); muted inactive, filled-on-focus icons, cart-count badge.
 export default function TabLayout() {
   const colors = useThemeColors();
   const cartCount = useCartStore((s) => s.items.reduce((total, i) => total + i.quantity, 0));
@@ -17,7 +18,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.brand,
+        tabBarActiveTintColor: colors.foreground,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
         tabBarButton: HapticTab,

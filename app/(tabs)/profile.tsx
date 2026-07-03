@@ -294,6 +294,7 @@ export default function ProfileScreen() {
                     uri={brand.logo && brand.logo.startsWith('http') ? brand.logo : undefined}
                     fallback={brand.displayName.charAt(0).toUpperCase()}
                     size={40}
+                    variant="logo"
                   />
                   <Text variant="label" className="flex-1">
                     {brand.displayName}
@@ -317,11 +318,7 @@ export default function ProfileScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <SideMenu
-        visible={isMenuVisible}
-        onClose={() => setIsMenuVisible(false)}
-        userName="Khanyisomthamo2"
-      />
+      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
       <YiivaHeader
         onMenuPress={handleMenuPress}
         onCartPress={handleCartPress}

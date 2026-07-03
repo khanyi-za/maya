@@ -55,29 +55,29 @@ function buildTimeline(
 
   const steps: TimelineStep[] = [
     {
-      title: 'Order Placed',
-      description: 'Your order has been received',
+      title: 'Purchase Placed',
+      description: 'Your purchase has been received',
       completed: true,
       current: false,
       timestamp: formatDateTime(at('PENDING_PAYMENT')),
     },
     {
-      title: 'Order Confirmed',
-      description: 'Payment confirmed — the brand is preparing your order',
+      title: 'Purchase Confirmed',
+      description: 'Payment confirmed — the brand is preparing your purchase',
       completed: confirmedDone,
       current: false,
       timestamp: formatDateTime(at('CONFIRMED')),
     },
     {
       title: 'Shipped',
-      description: 'Your order is on its way to you',
+      description: 'Your purchase is on its way to you',
       completed: shippedDone,
       current: false,
       timestamp: formatDateTime(at('SHIPPED')),
     },
     {
       title: 'Delivered',
-      description: 'Order successfully delivered',
+      description: 'Purchase successfully delivered',
       completed: deliveredDone,
       current: false,
       timestamp: formatDateTime(at('DELIVERED')),
@@ -122,17 +122,17 @@ export default function TrackOrderScreen() {
 
   const handleCancelOrder = () => {
     if (!orderId) return;
-    Alert.alert('Cancel this order?', 'This can’t be undone.', [
-      { text: 'Keep order', style: 'cancel' },
+    Alert.alert('Cancel this purchase?', 'This can’t be undone.', [
+      { text: 'Keep it', style: 'cancel' },
       {
-        text: 'Cancel order',
+        text: 'Cancel purchase',
         style: 'destructive',
         onPress: () =>
           cancelMutation.mutate(
             { orderId, reason: 'CHANGED_MIND' },
             {
               onError: () =>
-                Alert.alert("Couldn't cancel", 'The order may already be processing.'),
+                Alert.alert("Couldn't cancel", 'The purchase may already be processing.'),
             }
           ),
       },
@@ -145,7 +145,7 @@ export default function TrackOrderScreen() {
       style={{ paddingTop: insets.top + 16 }}
     >
       <View className="w-10" />
-      <Text variant="heading">Track Order</Text>
+      <Text variant="heading">Track Purchase</Text>
       <TouchableOpacity onPress={handleClosePress} className="p-2">
         <IconSymbol name="xmark" size={20} color={colors.foreground} />
       </TouchableOpacity>
@@ -164,7 +164,7 @@ export default function TrackOrderScreen() {
         <View className="flex-1 items-center justify-center gap-4 px-10" style={{ paddingTop: insets.top }}>
           <IconSymbol name="exclamationmark.triangle" size={72} color={colors.mutedForeground} />
           <Text variant="title" className="text-center">
-            {notFound ? "We couldn't find that order" : "Couldn't load your order"}
+            {notFound ? "We couldn't find that purchase" : "Couldn't load your purchase"}
           </Text>
           <Button
             variant="brand"
@@ -362,10 +362,10 @@ export default function TrackOrderScreen() {
               <IconSymbol name="slash.circle" size={24} color={colors.danger} />
               <View className="flex-1">
                 <Text variant="label" className="mb-1 text-danger">
-                  Order cancelled
+                  Purchase cancelled
                 </Text>
                 <Text variant="caption" className="leading-5">
-                  This order has been cancelled and won&apos;t be delivered.
+                  This purchase has been cancelled and won&apos;t be delivered.
                 </Text>
               </View>
             </View>
@@ -373,7 +373,7 @@ export default function TrackOrderScreen() {
         ) : (
           <Card className="mx-5 mt-4 p-5">
             <Text variant="heading" className="mb-5">
-              Order Status
+              Purchase Status
             </Text>
             <View>{timeline.map((step, index) => renderStatusStep(step, index))}</View>
           </Card>
@@ -415,7 +415,7 @@ export default function TrackOrderScreen() {
               </>
             ) : trackingPending ? (
               <Text variant="caption" className="leading-5">
-                The courier hasn&apos;t collected your order yet. Tracking will
+                The courier hasn&apos;t collected your purchase yet. Tracking will
                 appear here once it&apos;s on the move.
               </Text>
             ) : (
@@ -434,7 +434,7 @@ export default function TrackOrderScreen() {
               <Text variant="label" className="mb-0.5">
                 Contact {order.items[0]?.merchant.displayName ?? 'the brand'}
               </Text>
-              <Text variant="caption">Ask questions about your order</Text>
+              <Text variant="caption">Ask questions about your purchase</Text>
             </View>
             <IconSymbol name="chevron.right" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
@@ -450,7 +450,7 @@ export default function TrackOrderScreen() {
                 <IconSymbol name="xmark.circle" size={20} color={colors.danger} />
                 <View className="flex-1">
                   <Text variant="label" className="mb-0.5 text-danger">
-                    {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
+                    {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Purchase'}
                   </Text>
                   <Text variant="caption">Free cancellation before dispatch</Text>
                 </View>
@@ -468,7 +468,7 @@ export default function TrackOrderScreen() {
               Need Help?
             </Text>
             <Text variant="caption" className="leading-5">
-              If you have any questions about your order, feel free to contact
+              If you have any questions about your purchase, feel free to contact
               the brand directly.
             </Text>
           </View>

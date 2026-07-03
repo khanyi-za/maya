@@ -59,7 +59,7 @@ export default function PayfastScreen() {
   };
 
   const handleClose = () => {
-    Alert.alert('Cancel payment?', 'Your order will stay unpaid and you can retry from checkout.', [
+    Alert.alert('Cancel payment?', 'Your purchase will stay unpaid and you can retry from checkout.', [
       { text: 'Keep paying', style: 'cancel' },
       { text: 'Cancel payment', style: 'destructive', onPress: () => finish('cancelled') },
     ]);

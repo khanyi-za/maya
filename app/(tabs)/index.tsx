@@ -33,18 +33,63 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { useUnreadNotificationCount } from '@/hooks/useNotificationQueries';
+import { Avatar } from '@/components/ui/avatar';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { haptics } from '@/lib/haptics';
+
+// Skeleton mirrors the real ProductCard proportions (2:3 media + text lines)
+// so the loading → loaded swap doesn't jump.
+function SkeletonCard() {
+  return (
+    <View className="flex-1 overflow-hidden rounded-lg border border-border bg-card">
+      <Skeleton className="aspect-[2/3] w-full rounded-none" />
+      <View className="gap-2 px-3 pb-3 pt-2">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
+        <Skeleton className="h-4 w-1/4" />
+      </View>
+    </View>
+  );
+}
 
 function FeedSkeleton() {
   return (
     <View className="pt-5">
-      {[0, 1, 2].map((r) => (
+      {[0, 1].map((r) => (
         <View key={r} className="mb-3 flex-row gap-3 px-3">
-          <Skeleton className="h-80 flex-1 rounded-lg" />
-          <Skeleton className="h-80 flex-1 rounded-lg" />
+          <SkeletonCard />
+          <SkeletonCard />
         </View>
       ))}
+    </View>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  caption,
+  children,
+}: {
+  icon: React.ComponentProps<typeof IconSymbol>['name'];
+  title: string;
+  caption?: string;
+  children?: React.ReactNode;
+}) {
+  const colors = useThemeColors();
+  return (
+    <View className="items-center gap-3 px-10 py-20">
+      <View className="h-16 w-16 items-center justify-center rounded-full bg-muted">
+        <IconSymbol name={icon} size={28} color={colors.mutedForeground} />
+      </View>
+      <Text variant="heading">{title}</Text>
+      {caption && (
+        <Text variant="body" className="text-center text-muted-foreground">
+          {caption}
+        </Text>
+      )}
+      {children}
     </View>
   );
 }
@@ -131,7 +176,8 @@ export default function HomeScreen() {
     <View key="trending-brands" className="my-5">
       <View className="mb-4 flex-row items-center justify-between px-5">
         <Text variant="title">Trending Brands</Text>
-        <TouchableOpacity onPress={() => router.push('/explore')}>
+        {/* ST-9: brand discovery lives on the Shop tab, not the shelved Explore screen. */}
+        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
           <Text className="text-[14px] font-medium text-brand">See All</Text>
         </TouchableOpacity>
       </View>
@@ -140,13 +186,13 @@ export default function HomeScreen() {
           const isFollowingBrand = resolveFollowed(followed, brand.id, brand.isFollowedByMe);
           return (
             <TouchableOpacity key={brand.id} className="w-[120px] items-center" onPress={() => handleBrandPress(brand.username)} activeOpacity={0.9}>
-              {brand.logo ? (
-                <Image source={imageSource(brand.logo)} style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 8, backgroundColor: colors.muted }} contentFit="cover" />
-              ) : (
-                <View className="mb-2 h-20 w-20 items-center justify-center rounded-full bg-muted">
-                  <Text className="text-[28px] font-bold text-muted-foreground">{brand.displayName.charAt(0).toUpperCase()}</Text>
-                </View>
-              )}
+              <Avatar
+                uri={brand.logo}
+                fallback={brand.displayName.charAt(0).toUpperCase()}
+                size={80}
+                variant="logo"
+                className="mb-2"
+              />
               <Text variant="label" numberOfLines={1} className="mb-3 text-center text-[14px]">
                 {brand.displayName}
               </Text>
@@ -155,6 +201,7 @@ export default function HomeScreen() {
                 onPress={(e) => {
                   e.stopPropagation();
                   if (!requireAuth()) return;
+                  haptics.light();
                   toggleFollow(brand.id, isFollowingBrand);
                 }}
               >
@@ -178,6 +225,8 @@ export default function HomeScreen() {
         image: imageSource(p.image),
         title: p.name,
         artistName: p.merchant.displayName,
+        // NOTE: /api/products/new-arrivals doesn't return merchant.username yet —
+        // when nuwa adds it, pass it here to make the rail's artist link live.
         price: formatZAR(p.price),
       }))}
       onSeeAll={() => handleSeeAll('New Arrivals')}
@@ -214,12 +263,11 @@ export default function HomeScreen() {
   const renderBody = () => {
     if (gender === null) {
       return (
-        <View className="items-center gap-3 px-10 py-20">
-          <Text variant="heading">Coming soon</Text>
-          <Text variant="body" className="text-center text-muted-foreground">
-            Home & Lifestyle is on its way. Check back shortly.
-          </Text>
-        </View>
+        <EmptyState
+          icon="sofa"
+          title="Coming soon"
+          caption="Home & Lifestyle is on its way. Check back shortly."
+        />
       );
     }
 
@@ -229,23 +277,21 @@ export default function HomeScreen() {
 
     if (feedQuery.isError) {
       return (
-        <View className="items-center gap-3 px-10 py-20">
-          <Text variant="heading">Couldn&apos;t load the feed</Text>
+        <EmptyState icon="wifi.slash" title="Couldn't load the feed">
           <Button variant="brand" className="mt-2 px-8" onPress={() => feedQuery.refetch()}>
             Retry
           </Button>
-        </View>
+        </EmptyState>
       );
     }
 
     if (products.length === 0) {
       return (
-        <View className="items-center gap-3 px-10 py-20">
-          <Text variant="heading">Nothing here yet</Text>
-          <Text variant="body" className="text-center text-muted-foreground">
-            No products match this view. Try another tab or category.
-          </Text>
-        </View>
+        <EmptyState
+          icon="sparkles"
+          title="Nothing here yet"
+          caption="No products match this view. Try another tab or category."
+        />
       );
     }
 
@@ -261,7 +307,7 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} userName="Khanyisomthamo2" />
+      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
       <YiivaHeader
         onMenuPress={handleMenuPress}
         onCartPress={handleCartPress}

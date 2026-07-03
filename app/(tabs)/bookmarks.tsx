@@ -100,7 +100,7 @@ export default function BookmarksScreen() {
       return (
         <View className="flex-row flex-wrap gap-3 px-5 pt-4">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-56 flex-1 basis-[45%] rounded-xl" />
+            <Skeleton key={i} className="aspect-[2/3] flex-1 basis-[45%] rounded-xl" />
           ))}
         </View>
       );

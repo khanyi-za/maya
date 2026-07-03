@@ -1,12 +1,176 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-06-26
+> Last updated: 2026-07-02 (session close)
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
 
 ---
 
-## 2026-06-26 — Search reels + account/notifications/orders — read first
+## 2026-07-02 — Screen-upgrade round 1 (post-redesign polish) — read first
+
+**ALL UNCOMMITTED** (together with the SDK 54 upgrade below — commit next
+session). Screen-by-screen visual/UX upgrades on top of the redesign, each
+verified headless (tsc clean apart from the pre-existing VideoCard error;
+`expo export -p ios` bundles clean) and visually on a physical device via
+Expo Go. Backend origin: `.env` → **Mac LAN IP** `http://192.168.10.18:3005`
+(physical device can't resolve localhost; IP is network-specific).
+
+**Vocabulary: order → purchase (UI copy ONLY, owner decision).** 9 files —
+headings, buttons, alerts, empty states ("My purchases", "COMPLETE PURCHASE",
+"Purchase Successful!", "Track Purchase"…). Routes/hooks/types/API fields
+unchanged. ⚠️ nuwa notification/email copy still says "order" — pending pass.
+
+**Done this round:**
+- **SideMenu** rebuilt: auth-driven identity header (Avatar + name + email /
+  guest sign-in CTA), labeled sections, icon chips, dark-mode **Switch**,
+  dead links (/returns, /gift-voucher, /help → 404) now inert "Soon" rows,
+  backdrop fade, haptics, version from expo-constants. `userName` prop
+  deleted (was hardcoded "Khanyisomthamo2" in 4 screens).
+- **Home**: ProductCard **2:3 aspect** (was fixed 370px ≈ 1:2) — grid stays
+  2-col, ~2 rows/screen now; skeletons mirror real card anatomy everywhere
+  (home/search/wishlist); FeedTabs stable underline + pt-4 spacing; tab bar
+  active tint = **ink** (owner call: no blue); trending brands on Avatar
+  `variant="logo"`; Trending "See All" → Shop tab (ST-9); EmptyState
+  icon-circle pattern; rail artist-link disabled until nuwa serves
+  new-arrivals `merchant.username` (slug-guess 404'd for 4/6 demo brands).
+- **Avatar `variant="logo"`** (new): contain-fit + 14% padding on an
+  always-white bordered coin — logos never crop, white wordmarks stay visible
+  (Embedded's needed a DB-side Cloudinary `e_colorize` fix too). Applied:
+  trending, Shop directory, chat header, brand profile.
+- **Search**: browse rail now shows **real categories** (gender-aware, same
+  API as Home; `showAll={false}`) instead of the old Men/Women filter cards —
+  tap runs a **category-scoped search** via `/api/search/category` (new
+  `useCategorySearchResults` hook; results header "N results in X"; text input
+  switches back to universal). Plus: **Cancel** button (hamburger tucks away),
+  clear-all recents, keyboard dismiss-on-drag, no-results trending chips,
+  honest placeholder, icon-circle states.
+- **Discover reels grid**: 6px mosaic gutters, **staggered two-column
+  "running" layout** (right column's first cell is 9:12 — `ReelCard`
+  `size='short'`), gradient label scrims + play glyph. Dep added:
+  **expo-linear-gradient** (first-party, SDK-matched).
+- **Product page**: emoji chrome → IconSymbols; **share button now works**
+  (native sheet — it had NO handler); "TAP TO ZOOM" removed (no zoom exists);
+  five dead "→" CTAs removed; size chips haptic + press-scale; dots → active
+  pill; merchant line reads as a link; **Similar Items → shared
+  RowProductList rail** (rail itself upgraded to 2:3; See All now optional).
+- **Brand page**: **hero videos now autoplay on swipe** (old backlog bug —
+  playback was only started in the player-creation callback; mute toggle also
+  never reached existing players, both fixed via a state-driven effect);
+  category tabs → brand pill chips; EvenGrid 2:3 + dead heart removed; dots
+  pill; follow haptic.
+
+**Product-copy decisions parked:** "Get it now, pay later" section promises
+Payflex/PayJustNow/Mobicred/RCS — checkout is PayFast-only v1.
+
+**▶ NEXT:** commit everything; then continue screens: **Cart, Checkout,
+Orders/Track, Wishlist, Shop, Notifications, Account, Chat, Auth**. Deferred
+decisions: @gorhom/bottom-sheet (checkout address picker + brand contact
+modal), nuwa new-arrivals `username` one-liner, nuwa "purchase" copy pass.
+
+---
+
+## ⚠️ 2026-07-02 — Backend data divergence: demo (:3005) vs dev (:3000)
+
+The Home **category rail + gendered feeds** now depend on backend data that
+exists ONLY in the demo env (`yiiva_demo` on :3005): the 18-category taxonomy
+(with Cloudinary card images), gender-curated `Product.genderType`
+(88 WOMEN / 40 MEN / 71 UNISEX), and jittered timestamps for feed interleaving.
+nuwa's `/api/categories` also now filters chips per gender tab (unisex shows in
+both). **If maya is repointed at the dev backend (:3000 / `ayana` DB), expect
+few/zero category chips and identical Women/Men feeds — that's un-curated data,
+not a maya bug.** Fix by running the importer's `seed-demo` + `relink` +
+`regender` against that DB first. Full detail: `../nuwa/STATUS.md` (2026-07-02
+divergence note).
+
+---
+
+## 2026-07-02 — Expo SDK 54 upgrade (UNCOMMITTED) — read first
+
+Expo Go on physical devices only supports the latest SDK → upgraded maya
+**SDK 53 → 54**: RN 0.79.5 → **0.81.5**, React 19.0 → **19.1**, reanimated 3 →
+**4.1** (+ new `react-native-worklets`), expo-router 5 → **6**, expo-video 2 →
+**3**, expo-image 2 → **3**. **NativeWind unpinned 4.1.23 → `^4.2`**
+(css-interop 0.2.x, worklets babel — the exact-pin reason was SDK-53-only;
+design-tokens §8 updated). Fixes rolled into the upgrade: `babel-preset-expo`
+added as an explicit devDependency (SDK 54 stops hoisting it — bundle failed
+without it); dead `lib/media-resolver.ts` deleted (referenced now-absent
+`expo-asset`; zero importers); invalid `android.usesCleartextTraffic` removed
+from app.json (dropped from the SDK 54 schema); `.expo/` untracked + gitignored.
+
+**Verified headless:** `npx tsc` back to baseline (only the pre-existing unused
+`VideoCard.tsx` error); `expo export -p ios` bundles clean (4.7 MB);
+expo-doctor passes except the pre-existing non-square app icon (ICON_BLACK.png
+580×204 — needs a real square icon asset eventually).
+**NOT yet verified (user's step):** `expo start -c` (cache clear REQUIRED after
+the babel/dep changes) → full visual pass on device — this doubles as the
+still-pending redesign visual pass (dark-mode flip + reels playback).
+
+---
+
+## 2026-07-01 — Visual redesign (all 9 phases) + reels COMMITTED
+
+**Committed at `447b515`** ("all 9 phase of visual aesthetic revamp") —
+**working tree clean.** This one commit contains BOTH the full design-system
+migration AND the reels feature described in the 2026-06-26 section below
+(which was uncommitted at the time it was written; `app/reels.tsx`,
+`ReelCard`/`ReelsGrid`, the Cloudinary-URL `reels-fixtures.ts` rebuild, and the
+`assets/reels/` deletion all landed here).
+
+**The redesign — every reachable buyer screen is now on the token design
+system, with dark mode:**
+
+- **Stack:** NativeWind v4 + token layer. ⚠️ `nativewind` pinned **EXACTLY
+  4.1.23** (4.2.x needs RN 0.83+, breaks on SDK 53 / RN 0.79) and
+  `tailwindcss` **v3** (^3.4, NOT v4). Wiring: `global.css` (light + `.dark`
+  hex tokens) + `tailwind.config.js` + babel/metro config +
+  `import '../global.css'` in `app/_layout.tsx`.
+- **Brand accent = Azure/Sky `#0ea5e9`** (dark lift `#38bdf8`) — deliberately
+  NOT athena's violet; same shared token system, surface-specific accent.
+  `info` moved to teal `#0891b2` to avoid brand===info collision. Reels
+  like/save stay red/gold (`--like`/`--save`).
+- **Primitives:** `components/ui/{text,button,card,badge,input,skeleton,
+  separator,avatar}.tsx` (token-driven, RNR-style, authored directly);
+  `lib/utils.ts` `cn()`; `lib/order-status.ts` (single status→tone source);
+  `lib/theme.ts` = JS mirror of the CSS tokens (`THEME_COLORS` +
+  `useThemeColors()`) for RN APIs needing color VALUES — **keep in sync with
+  global.css**.
+- **Screens migrated (phases 2–9):** tab bar + header shell, Home +
+  ProductCard, product detail, cart, checkout, orders/track/order-success,
+  search + reels grid, Shop directory, merchant profile, auth (all 6),
+  account, bookmarks, notifications, chat, SideMenu, explore, payfast wrapper.
+  Full-screen reels (`app/reels.tsx`) intentionally stays dark
+  (white-on-black video overlays — correct, don't "fix").
+- **Dark mode toggle** lives in the **SideMenu** (nativewind
+  `useColorScheme().toggleColorScheme`). StatusBar is scheme-derived.
+- **Enhancements:** skeleton loading states, `lib/haptics.ts` (guarded
+  expo-haptics: card like/bookmark, reels Buy/Like/Save, add-to-cart success),
+  button loading states, brand press animations.
+- **Font bug fixed:** all 18 unloaded Didot/RobotoMono `fontFamily` refs
+  removed (only SpaceMono is loaded).
+- **⚠️ Lesson (footgun):** Tailwind opacity modifiers (`bg-danger/10`) do NOT
+  work on our CSS-var token colors — use the explicit `-subtle` tokens
+  (`brand-subtle`, `danger-subtle`, `info-subtle`, `warning-subtle`, …).
+- **Left un-migrated (acceptable):** `components/VideoCard.tsx` (unused; owns
+  the one pre-existing tsc error), `app/video-player.tsx` (deprecated mockup),
+  `app/+not-found.tsx`.
+- Plan docs: `docs/maya-redesign/` (README + design-tokens + 9-phase plan).
+
+**Verified:** tsc clean (only the pre-existing VideoCard error);
+`expo export -p ios` bundles clean; opacity-modifier sweep clean.
+**NOT yet verified (user's step):** on-device visual pass — `expo start -c`,
+flip dark mode in the SideMenu, and visually confirm reels playback
+(grid + full-screen; Claude only did headless bundle checks).
+
+**▶ NEXT:** (a) device visual pass + dark-mode flip + reels playback confirm;
+(b) then pick a track — dynamic reels backend feed (fixtures → nuwa-served
+feed, near-zero UI swap), or the deferred redesign extras
+(@gorhom/bottom-sheet pickers), or the next integration screen.
+
+---
+
+## 2026-06-26 — Search reels + account/notifications/orders
+> ⚠️ Historical note: the "UNCOMMITTED" reels work below was committed on
+> 2026-07-01 as part of `447b515` (see the section above).
 
 **Committed at `312168e`** ("2nd round of mobile integration"): the
 **`/account`** hub (profile + view-only addresses + sign out), the
@@ -97,7 +261,9 @@ physical-device demos need `EXPO_PUBLIC_API_URL` set to the Mac's LAN IP.
 **The buyer app is fully wired to the live nuwa backend** — every active screen
 runs on real data (`USE_FIXTURES = false`), auth is implemented end-to-end,
 checkout reaches the PayFast sandbox, and chat is real-time over socket.io.
-(2026-06-19: also runs against the local demo backend on :3005 — see above.)
+(2026-06-19: also runs against the local demo backend on :3005 — see above.
+2026-07-01: every screen re-skinned onto the Azure token design system with
+dark mode — see the top section.)
 
 ---
 
