@@ -1,8 +1,70 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-07-02 (session close)
+> Last updated: 2026-07-04 (session close)
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
+
+---
+
+## 2026-07-04 — Brand-page collection tabs (UNCOMMITTED) — read first
+
+The merchant/artist page catalogue tabs now mirror **the brand's own site
+sections** (owner requirement). The old YIIVA-category chips are replaced by
+the merchant's StoreCollections, in their site-nav order with their site-nav
+labels (an "All" tab first; the row hides entirely for brands with no
+collections).
+
+- **Files (uncommitted):** `app/artist/[artistId].tsx` (tabs from
+  `profile.collections`, state = `selectedCollection` slug),
+  `hooks/useMerchantQueries.ts` (`useMerchantProducts(username, {clothingType?,
+  collection?})`), `lib/api-client.ts` (`MerchantCollection` type on
+  `MerchantProfile` + `collection` query param).
+- **Backend dependency:** nuwa's (also uncommitted) collections work —
+  `collections[]` on the profile + `?collection=` filter + the importer's new
+  `renav` command that scraped each demo brand's live site nav. Demo **:3005 is
+  running it**; the dev DB has the migration but no collection curation, so
+  brand pages there just hide the tab row.
+- **Verified:** tsc clean, iOS bundle clean; API verified end-to-end against
+  all 6 demo brands' live sites (e.g. tolthema 30 collections → 8 tabs matching
+  their menu). On-device visual pass = user's step.
+
+**▶ NEXT: more merchant profile page work (owner's stated next focus).**
+
+---
+
+## 2026-07-03 — Screen-upgrade round 2 — COMMITTED at `dd0bd77`
+
+Round-2 polish across the remaining screens (everything except Auth), plus one
+structural change to checkout. All tsc + bundle verified.
+
+- **Cart:** brand-grouped rows (mirrors the per-store order split),
+  swipe-to-delete (`ReanimatedSwipeable`; `GestureHandlerRootView` added at the
+  root layout — it was never wired), trash-tap now confirms, qty>1 shows line
+  total, haptics. **Tab cart badge fixed:** it read the dead pre-integration
+  local store — now derives from the server-cart query cache.
+  **`lib/cart-store.ts` DELETED** (was fully dead once the badge moved).
+- **Checkout is now 3-STEP** (safety: address chosen in Delivery, re-confirmed
+  on Review before any money moves): Etsy-style circle stepper (Delivery →
+  Payment → Review), address picker moved from the modal INLINE into step 1,
+  PayFast card + reassurance copy on step 2 plus **mock "Soon" payment rows**
+  (Apple Pay / Card with Visa+MC marks / Payflex — `MOCK_PAYMENT_METHODS`
+  array, display-only), Review = editable address/payment cards + grouped
+  summary + totals; COMPLETE PURCHASE only exists on step 3. Back walks steps.
+- **Orders/Track:** shared EmptyState states, brand-grouped items, **one
+  contact row per brand** (multi-brand purchases could only reach the first
+  merchant before), tracking skeletons, cancel haptic.
+- **Wishlist:** now the Home-style 2-col ProductCard grid (owner call); the
+  list/masonry toggle is gone → `components/MasonryGrid.tsx` is now
+  unconsumed (delete in a cleanup pass).
+- **Notifications / Account / Chat:** skeleton parity, shared EmptyState,
+  haptics; Account sign-out now confirms; Chat got WhatsApp-style **day
+  separators**.
+- **Shop:** brand rows show product counts; **category taps now work** — NEW
+  `app/category/[slug].tsx` (gender-aware category listing over
+  `/api/search/category`, 2-col grid, infinite scroll). Was a console.log stub.
+- **New shared primitive:** `components/ui/empty-state.tsx` (the icon-circle
+  pattern, `fill` variant) — used by cart/orders/track/wishlist/notifications/
+  account/chat/shop/category. `lib/theme.ts` gained `dangerForeground`.
 
 ---
 

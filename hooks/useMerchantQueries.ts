@@ -21,13 +21,20 @@ export function useMerchantProfile(username: string | undefined) {
 
 export function useMerchantProducts(
   username: string | undefined,
-  clothingType?: string
+  filters?: { clothingType?: string; collection?: string }
 ) {
   return useInfiniteQuery({
-    queryKey: ['merchants', 'products', username, clothingType ?? 'all'],
+    queryKey: [
+      'merchants',
+      'products',
+      username,
+      filters?.clothingType ?? 'all',
+      filters?.collection ?? 'all',
+    ],
     queryFn: ({ pageParam }) =>
       getMerchantProducts(username as string, {
-        clothingType,
+        clothingType: filters?.clothingType,
+        collection: filters?.collection,
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,

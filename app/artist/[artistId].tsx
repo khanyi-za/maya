@@ -101,7 +101,8 @@ export default function ArtistProfileScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const colors = useThemeColors();
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  // 'All' or a StoreCollection slug (the brand's own site sections).
+  const [selectedCollection, setSelectedCollection] = useState('All');
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -118,7 +119,7 @@ export default function ArtistProfileScreen() {
   const profileQuery = useMerchantProfile(username);
   const productsQuery = useMerchantProducts(
     username,
-    selectedCategory !== 'All' ? selectedCategory : undefined
+    selectedCollection !== 'All' ? { collection: selectedCollection } : undefined
   );
   const merchant = profileQuery.data?.merchant;
   useTrackMerchantView(merchant?.id);
@@ -127,7 +128,9 @@ export default function ArtistProfileScreen() {
     () => productsQuery.data?.pages.flatMap((p) => p.products) ?? [],
     [productsQuery.data]
   );
-  const categories = productsQuery.data?.pages[0]?.categories ?? [];
+  // The brand's own site sections (StoreCollections, merchant-ordered) —
+  // replaces the old YIIVA-category chips on this screen.
+  const collections = merchant?.collections ?? [];
 
   const gridData = React.useMemo(
     () =>
@@ -481,19 +484,20 @@ export default function ArtistProfileScreen() {
           ) : null}
         </View>
 
-        {/* Category Tabs */}
-        {categories.length > 0 && (
+        {/* Collection tabs — mirror the brand's own site sections, in their
+            order. Hidden entirely when the brand has no collections. */}
+        {collections.length > 0 && (
           <View className="pt-2 pb-4">
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
             >
-              {['All', ...categories].map((category) => {
-                const selected = selectedCategory === category;
+              {[{ slug: 'All', name: 'All' }, ...collections].map((collection) => {
+                const selected = selectedCollection === collection.slug;
                 return (
                   <TouchableOpacity
-                    key={category}
+                    key={collection.slug}
                     className={
                       selected
                         ? 'rounded-full border border-brand bg-brand-subtle px-4 py-2'
@@ -501,16 +505,14 @@ export default function ArtistProfileScreen() {
                     }
                     onPress={() => {
                       haptics.light();
-                      setSelectedCategory(category);
+                      setSelectedCollection(collection.slug);
                     }}
                   >
                     <Text
                       variant="caption"
                       className={selected ? 'font-semibold text-brand' : 'text-foreground'}
                     >
-                      {category === 'All'
-                        ? 'All'
-                        : category.charAt(0).toUpperCase() + category.slice(1)}
+                      {collection.name}
                     </Text>
                   </TouchableOpacity>
                 );

@@ -54,7 +54,7 @@ app/
   checkout.tsx
   order-success.tsx
   track-order.tsx
-  video-player.tsx           TikTok-style reels (UI mockup only — see status.md)
+  video-player.tsx           DEAD — old image-based reels mockup, 0 consumers (superseded by reels.tsx)
 ```
 
 The route `/artist/[artistId]` and `/chat/[artistId]` both use a param literally named `artistId` but the value passed and expected is the **merchant username**. Future refactor: rename to `/merchant/[username]` and `/chat/[username]`. Not blocking.
@@ -63,17 +63,17 @@ The route `/artist/[artistId]` and `/chat/[artistId]` both use a param literally
 
 | File | What |
 |---|---|
-| `lib/cart-store.ts` | Cart items, qty controls. Persisted (`shopping_cart`) |
-| `lib/social-store.ts` | likedProducts, bookmarkedProducts, followedMerchants (Sets). Persisted (3 keys) |
-| `lib/chat-store.ts` | Conversations with `setTimeout` auto-reply mock. **Not persisted, not loaded** |
+| `lib/cart-store.ts` | **DELETED (2026-07-03)** — cart is fully server-backed; the tab badge reads the `['cart']` query cache |
+| `lib/social-store.ts` | likedProducts (local-only likes, v1). Persisted. Bookmarks/follows are SERVER-backed via `lib/server-social.ts` overlay |
+| `lib/chat-store.ts` | Dead prototype mock — 0 consumers (chat is REST + socket.io) |
 | `contexts/FilterContext.tsx` | `activePrimaryFilter: 'women' \| 'men' \| 'home-lifestyle'` — drives every feed query |
 
 **Auth store** (per `docs/auth-mobile-guide.md`): discriminated-union `{ status: 'loading' \| 'authenticated' \| 'guest' }`. Access token in memory only; refresh token in `expo-secure-store` under key `yiiva.refreshToken`.
 
 ### Data fetching
 
-- **TanStack Query** is configured globally in `_layout.tsx` but **most screens still use `lib/dummy-data.ts` fixtures.** Replacing dummy data with real queries is core production work.
-- **`lib/api-client.ts`** has a typed contract for buyer endpoints: feed, featured, new arrivals, product detail, similar, merchants, search variants. It's the de facto starting point for the real API.
+- **TanStack Query** is configured globally in `_layout.tsx`; **every active screen runs on the live `/api` surface** (hooks in `hooks/use*Queries.ts`). `lib/dummy-data.ts` has 0 consumers (dead — delete in a cleanup pass).
+- **`lib/api-client.ts`** is the typed contract for all buyer endpoints (feed, product, cart, checkout, orders, merchants incl. `collections[]`, search, notifications).
 - **`lib/local-assets.ts`** maps `/demo-assets/<brand>/<file>` URLs to bundled `require()` calls. Only `suhu` and `tol_thema` brands have real bundled assets. Once the backend returns absolute CDN URLs, this file disappears.
 
 ### Demo data
@@ -139,12 +139,7 @@ Each `screens/<n>-<name>/` has:
 ### Known footguns / non-obvious
 
 - The `/artist/[artistId]` route param is **username**, not id. Same for `/chat/[artistId]`.
-- Many handler functions are `console.log` placeholders — production wiring is incomplete.
-- The Wishlist screen is **entirely disconnected from `social-store.ts`** — uses its own hard-coded array.
-- The Video Player renders **images**, not videos, despite being structured as a TikTok-style feed.
-- Merchant brand list (`profile.tsx:51-87`) references **a misspelled path with a leading space** (`' masonwabe_profile_pic.png'`) repeated across most entries.
-- `chat-store.ts` is not loaded in `_layout.tsx` — chats will reset on app restart even in the prototype.
-- `app.json` enables `NSAllowsArbitraryLoads` + `usesCleartextTraffic` — fine for dev, **must be removed before store submission.**
+- `app.json` enables `NSAllowsArbitraryLoads` (iOS) — fine for dev, **must be removed before store submission.** (`android.usesCleartextTraffic` was already dropped in the SDK 54 upgrade.)
 - **`expo-video` `VideoView` renders BLACK / zero-sized with `StyleSheet.absoluteFill`** — give it **explicit `width/height: '100%'`** (see the artist/product screens and `ReelCard`/`reels.tsx`). This cost a long debug.
 - **`expo-video` won't play a bare `require()`'d asset number** in Expo Go, AND `Asset.fromModule(mod).uri` (a Metro dev-server URL) doesn't stream reliably on the iOS Simulator either — `.localUri` is null until `downloadAsync()`. Lesson from the reels work: **prefer remote Cloudinary `{uri}` over bundled video assets.** The reels were rebuilt onto `imageSource(url)` (Cloudinary, `vc_h264`) exactly because the bundled-asset path rendered black. Note: `expo-image` *does* accept require numbers; `expo-video` does not. Also `@/`-aliased `require()` doesn't register assets (no babel module-resolver) — use **relative** paths for asset requires.
 - **Adding/removing bundled assets needs a full Metro restart** (`expo start -c`); Fast Refresh won't re-register the asset map.

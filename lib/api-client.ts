@@ -479,6 +479,14 @@ export interface MerchantDetail {
  * `status` is ACTIVE for live brands; SUSPENDED/CLOSED render a placeholder
  * (MP-10). `heroMedia` are absolute CDN URLs (video URLs contain /video/).
  */
+/** The merchant's own site section — drives the brand-page catalogue tabs. */
+export interface MerchantCollection {
+  slug: string;
+  name: string;
+  image: string | null;
+  productCount: number;
+}
+
 export interface MerchantProfile {
   id: string;
   username: string;
@@ -495,6 +503,7 @@ export interface MerchantProfile {
   messagingEnabled: boolean;
   contact: { email: string | null };
   isFollowedByMe?: boolean;
+  collections: MerchantCollection[];
 }
 
 /**
@@ -1263,6 +1272,7 @@ export async function getMerchantProducts(
   username: string,
   params?: {
     clothingType?: string;
+    collection?: string;
     limit?: number;
     cursor?: string;
   }
@@ -1275,6 +1285,9 @@ export async function getMerchantProducts(
 
   if (params?.clothingType && params.clothingType !== 'All') {
     queryParams.append('clothingType', params.clothingType);
+  }
+  if (params?.collection) {
+    queryParams.append('collection', params.collection);
   }
   if (params?.limit) {
     queryParams.append('limit', String(params.limit));
