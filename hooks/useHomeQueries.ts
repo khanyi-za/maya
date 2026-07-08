@@ -57,3 +57,16 @@ export function useCategories(gender: GenderType | null) {
     enabled: gender !== null,
   });
 }
+
+/**
+ * All categories regardless of gender — for surfaces with no gender context
+ * (the brand page's Categories rail). Separate from useCategories so Home's
+ * null-means-disabled contract (home-lifestyle tab) stays untouched.
+ */
+export function useAllCategories() {
+  return useQuery({
+    queryKey: ['categories', 'all'],
+    queryFn: () => getCategories({}),
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+}

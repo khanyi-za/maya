@@ -293,7 +293,7 @@ export default function ExploreScreen() {
                           isFollowingBrand ? 'text-foreground' : 'text-brand-foreground',
                         )}
                       >
-                        {isFollowingBrand ? 'Following' : 'Follow'}
+                        {isFollowingBrand ? 'Subscribed' : 'Subscribe'}
                       </Text>
                     </TouchableOpacity>
                   </TouchableOpacity>

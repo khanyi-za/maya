@@ -3,10 +3,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   RefreshControl,
   ScrollView,
   TouchableOpacity,
@@ -24,12 +21,12 @@ import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { EvenGrid } from '@/components/EvenGrid';
+import { cn } from '@/lib/utils';
 import { useThemeColors } from '@/lib/theme';
+import { useAllCategories } from '@/hooks/useHomeQueries';
 import { resolveFollowed, useServerSocial } from '@/lib/server-social';
 import { useRequireAuth, useToggleFollow } from '@/hooks/useSocialMutations';
 import { imageSource } from '@/lib/image-source';
-import { formatZAR } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { APIError } from '@/lib/api-client';
 import {
@@ -43,6 +40,59 @@ const { width: screenWidth } = Dimensions.get('window');
 // Cloudinary video URLs live under /video/upload/; .mp4 covers legacy fixtures.
 function isVideoUrl(url: string): boolean {
   return url.includes('/video/') || url.endsWith('.mp4');
+}
+
+/** Home-category-card look: 145×190 image tile with a bottom scrim label. */
+function BrowseCard({
+  image,
+  label,
+  count,
+  onPress,
+}: {
+  image: string | null;
+  label: string;
+  count?: number;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      className="relative h-[190px] w-[145px] overflow-hidden rounded-xl"
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      {image ? (
+        <Image
+          source={imageSource(image)}
+          style={{ width: '100%', height: '100%' }}
+          contentFit="cover"
+          transition={200}
+        />
+      ) : (
+        <View className="h-full w-full bg-muted" />
+      )}
+      {/* Dark scrim over imagery — intentional in both themes (white label on media). */}
+      <View className="absolute bottom-0 left-0 right-0 items-center justify-center bg-black/40 px-2 py-2">
+        <Text className="text-center text-[13px] font-semibold text-white" numberOfLines={1}>
+          {label}
+        </Text>
+        {count !== undefined && (
+          <Text className="text-center text-[11px] text-white/80">
+            {count} item{count === 1 ? '' : 's'}
+          </Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function BrowseRailEmpty({ label }: { label: string }) {
+  return (
+    <View className="items-center px-10 pb-10 pt-4">
+      <Text variant="body" className="text-center text-muted-foreground">
+        This brand hasn&apos;t set up {label} yet.
+      </Text>
+    </View>
+  );
 }
 
 function HeroMediaItem({
@@ -101,8 +151,9 @@ export default function ArtistProfileScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const colors = useThemeColors();
-  // 'All' or a StoreCollection slug (the brand's own site sections).
-  const [selectedCollection, setSelectedCollection] = useState('All');
+  // What the browse rail shows: the brand's own site sections (collections)
+  // or YIIVA categories this brand sells in.
+  const [browseMode, setBrowseMode] = useState<'collections' | 'categories'>('collections');
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -117,31 +168,22 @@ export default function ArtistProfileScreen() {
   const requireAuth = useRequireAuth();
 
   const profileQuery = useMerchantProfile(username);
-  const productsQuery = useMerchantProducts(
-    username,
-    selectedCollection !== 'All' ? { collection: selectedCollection } : undefined
-  );
+  // Unfiltered page-1 fetch — its `categories` field lists the platform
+  // category slugs this brand actually sells in (feeds the Categories rail).
+  const productsQuery = useMerchantProducts(username);
+  const categoriesQuery = useAllCategories();
   const merchant = profileQuery.data?.merchant;
   useTrackMerchantView(merchant?.id);
 
-  const products = React.useMemo(
-    () => productsQuery.data?.pages.flatMap((p) => p.products) ?? [],
-    [productsQuery.data]
-  );
-  // The brand's own site sections (StoreCollections, merchant-ordered) —
-  // replaces the old YIIVA-category chips on this screen.
+  // The brand's own site sections (StoreCollections, merchant-ordered).
   const collections = merchant?.collections ?? [];
 
-  const gridData = React.useMemo(
-    () =>
-      products.map((product) => ({
-        id: product.id,
-        image: imageSource(product.primaryImage),
-        title: product.name,
-        price: formatZAR(product.price),
-      })),
-    [products]
-  );
+  // Cross-reference the brand's category slugs against the platform chip
+  // list (name + card image) — the same imagery the Home rail uses.
+  const brandCategories = React.useMemo(() => {
+    const slugs = new Set(productsQuery.data?.pages[0]?.categories ?? []);
+    return (categoriesQuery.data?.categories ?? []).filter((c) => slugs.has(c.slug));
+  }, [productsQuery.data, categoriesQuery.data]);
 
   const heroMediaItems = React.useMemo(
     () =>
@@ -175,21 +217,19 @@ export default function ArtistProfileScreen() {
     setShowContactModal(false);
   };
 
-  const handleGridItemPress = (item: any) => router.push(`/product/${item.id}`);
+  // Card tap → the full-screen browse sheet (app/merchant-browse.tsx).
+  const handleBrowse = (type: 'collection' | 'category', slug: string, name: string) => {
+    haptics.light();
+    router.push({
+      pathname: '/merchant-browse',
+      params: { username, type, slug, name },
+    });
+  };
 
   const handleMediaScroll = (event: any) => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
     const index = Math.round(scrollPosition / screenWidth);
     setCurrentMediaIndex(index);
-  };
-
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const nearBottom =
-      contentOffset.y + layoutMeasurement.height > contentSize.height - 600;
-    if (nearBottom && productsQuery.hasNextPage && !productsQuery.isFetchingNextPage) {
-      productsQuery.fetchNextPage();
-    }
   };
 
   const toggleVideoMute = () => setIsVideoMuted(!isVideoMuted);
@@ -201,7 +241,7 @@ export default function ArtistProfileScreen() {
       <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
         {/* Banner */}
-        <Skeleton className="w-full rounded-none" style={{ height: screenWidth * 1.2 }} />
+        <Skeleton className="w-full rounded-none" style={{ height: screenWidth * 1.33 }} />
         {/* Avatar overlapping the banner */}
         <View className="px-5">
           <Skeleton className="w-20 h-20 rounded-full -mt-10 border-4 border-background" />
@@ -216,10 +256,11 @@ export default function ArtistProfileScreen() {
         {/* Bio */}
         <Skeleton className="h-4 w-3/4 mx-5 mt-6" />
         <Skeleton className="h-4 w-2/3 mx-5 mt-2" />
-        {/* Product grid */}
-        <View className="flex-row flex-wrap justify-between px-4 mt-8 gap-y-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="w-[48%] aspect-[2/3] rounded-lg" />
+        {/* Browse toggle + card rail */}
+        <Skeleton className="mx-5 mt-6 h-11 rounded-lg" />
+        <View className="mt-4 flex-row gap-3 px-5">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-[190px] w-[145px] rounded-xl" />
           ))}
         </View>
       </View>
@@ -237,7 +278,7 @@ export default function ArtistProfileScreen() {
         </Text>
         <Button
           variant="primary"
-          className="rounded-full px-8"
+          className="px-8"
           onPress={() =>
             notFound ? router.dismissTo('/(tabs)') : profileQuery.refetch()
           }
@@ -269,7 +310,7 @@ export default function ArtistProfileScreen() {
         </Text>
         <Button
           variant="primary"
-          className="rounded-full px-8"
+          className="px-8"
           onPress={() => router.dismissTo('/(tabs)')}
         >
           Browse YIIVA
@@ -347,8 +388,6 @@ export default function ArtistProfileScreen() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={profileQuery.isRefetching}
@@ -361,7 +400,7 @@ export default function ArtistProfileScreen() {
         }
       >
         {/* Hero Section */}
-        <View className="relative" style={{ height: screenWidth * 1.2 }}>
+        <View className="relative" style={{ height: screenWidth * 1.33 }}>
           {heroMediaItems.length > 0 ? (
             <ScrollView
               horizontal
@@ -455,14 +494,14 @@ export default function ArtistProfileScreen() {
         <View className="flex-row items-center px-5 pt-4 gap-3">
           <Button
             variant={isFollowing ? 'outline' : 'brand'}
-            className="flex-1 rounded-full"
+            className="flex-1"
             onPress={handleFollow}
           >
-            {isFollowing ? 'Following' : 'Follow'}
+            {isFollowing ? 'Subscribed' : 'Subscribe'}
           </Button>
           <Button
             variant="outline"
-            className="flex-1 rounded-full"
+            className="flex-1"
             onPress={handleContact}
           >
             Contact
@@ -484,81 +523,101 @@ export default function ArtistProfileScreen() {
           ) : null}
         </View>
 
-        {/* Collection tabs — mirror the brand's own site sections, in their
-            order. Hidden entirely when the brand has no collections. */}
-        {collections.length > 0 && (
-          <View className="pt-2 pb-4">
+        {/* Browse toggle — the Shop screen's segmented control, scoped to
+            this brand: its own site sections vs the YIIVA categories it
+            sells in. Cards below open the full-screen browse sheet. */}
+        <View className="mb-4 mt-2 px-5">
+          <View className="flex-row rounded-lg bg-muted p-0.5">
+            <TouchableOpacity
+              className={cn(
+                'flex-1 items-center justify-center rounded-md px-4 py-2.5',
+                browseMode === 'collections' && 'bg-card'
+              )}
+              onPress={() => {
+                haptics.light();
+                setBrowseMode('collections');
+              }}
+            >
+              <Text
+                className={cn(
+                  'text-[15px]',
+                  browseMode === 'collections'
+                    ? 'font-semibold text-foreground'
+                    : 'font-medium text-muted-foreground'
+                )}
+              >
+                Collections
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className={cn(
+                'flex-1 items-center justify-center rounded-md px-4 py-2.5',
+                browseMode === 'categories' && 'bg-card'
+              )}
+              onPress={() => {
+                haptics.light();
+                setBrowseMode('categories');
+              }}
+            >
+              <Text
+                className={cn(
+                  'text-[15px]',
+                  browseMode === 'categories'
+                    ? 'font-semibold text-foreground'
+                    : 'font-medium text-muted-foreground'
+                )}
+              >
+                Categories
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Browse rail — Home-category-card design (image, scrim, label). */}
+        {browseMode === 'collections' ? (
+          collections.length === 0 ? (
+            <BrowseRailEmpty label="collections" />
+          ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingBottom: 32 }}
             >
-              {[{ slug: 'All', name: 'All' }, ...collections].map((collection) => {
-                const selected = selectedCollection === collection.slug;
-                return (
-                  <TouchableOpacity
-                    key={collection.slug}
-                    className={
-                      selected
-                        ? 'rounded-full border border-brand bg-brand-subtle px-4 py-2'
-                        : 'rounded-full border border-border px-4 py-2'
-                    }
-                    onPress={() => {
-                      haptics.light();
-                      setSelectedCollection(collection.slug);
-                    }}
-                  >
-                    <Text
-                      variant="caption"
-                      className={selected ? 'font-semibold text-brand' : 'text-foreground'}
-                    >
-                      {collection.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {collections.map((collection) => (
+                <BrowseCard
+                  key={collection.slug}
+                  image={collection.image}
+                  label={collection.name}
+                  count={collection.productCount}
+                  onPress={() => handleBrowse('collection', collection.slug, collection.name)}
+                />
+              ))}
             </ScrollView>
-          </View>
-        )}
-
-        {/* Product Grid */}
-        {productsQuery.isPending ? (
-          <View className="flex-row flex-wrap justify-between px-4 gap-y-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="w-[48%] aspect-[2/3] rounded-lg" />
+          )
+        ) : productsQuery.isPending || categoriesQuery.isPending ? (
+          <View className="flex-row gap-3 px-5 pb-8">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-[190px] w-[145px] rounded-xl" />
             ))}
           </View>
-        ) : productsQuery.isError ? (
-          <View className="py-10 items-center gap-3">
-            <Text variant="body" className="text-muted-foreground text-center">
-              Couldn&apos;t load this brand&apos;s products.
-            </Text>
-            <Button
-              variant="primary"
-              className="rounded-full px-8"
-              onPress={() => productsQuery.refetch()}
-            >
-              Retry
-            </Button>
-          </View>
-        ) : gridData.length === 0 ? (
-          <View className="py-16 items-center gap-3">
-            <IconSymbol name="bag" size={40} color={colors.mutedForeground} />
-            <Text variant="body" className="text-muted-foreground text-center">
-              No products yet.
-            </Text>
-          </View>
+        ) : brandCategories.length === 0 ? (
+          <BrowseRailEmpty label="categories" />
         ) : (
-          <>
-            <EvenGrid data={gridData} onItemPress={handleGridItemPress} />
-            {productsQuery.isFetchingNextPage && (
-              <ActivityIndicator
-                size="small"
-                color={colors.mutedForeground}
-                className="my-4"
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingBottom: 32 }}
+          >
+            {brandCategories.map((category) => (
+              <BrowseCard
+                key={category.slug}
+                image={category.image}
+                label={category.displayName}
+                onPress={() => handleBrowse('category', category.slug, category.displayName)}
               />
-            )}
-          </>
+            ))}
+          </ScrollView>
         )}
       </ScrollView>
     </View>

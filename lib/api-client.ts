@@ -773,12 +773,17 @@ export async function getNewArrivals(params: {
  * Backend endpoint: GET /api/categories  (docs/api/categories.md §1)
  */
 export async function getCategories(params: {
-  genderType: GenderType;
+  genderType?: GenderType;
 }): Promise<{ categories: Category[] }> {
   if (USE_FIXTURES) {
-    return { categories: homeFixtures.categories(params.genderType) };
+    return { categories: homeFixtures.categories(params.genderType ?? 'women') };
   }
 
+  // No genderType → all categories with ≥1 ACTIVE product (any gender) —
+  // for surfaces without a gender context (e.g. the brand page rail).
+  if (!params.genderType) {
+    return fetchAPI<{ categories: Category[] }>('/categories');
+  }
   const queryParams = new URLSearchParams({ genderType: params.genderType });
   return fetchAPI<{ categories: Category[] }>(`/categories?${queryParams}`);
 }

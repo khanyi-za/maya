@@ -76,6 +76,11 @@ export default function RootLayout() {
             <Stack>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="product/[productId]" options={{ headerShown: false }} />
+              {/* Brand collection/category explorer — slides up over the profile. */}
+              <Stack.Screen
+                name="merchant-browse"
+                options={{ headerShown: false, presentation: 'fullScreenModal' }}
+              />
               <Stack.Screen name="+not-found" />
             </Stack>
             <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />

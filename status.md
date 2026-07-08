@@ -1,12 +1,68 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-07-04 (session close)
+> Last updated: 2026-07-07 (session close)
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
 
 ---
 
-## 2026-07-04 — Brand-page collection tabs (UNCOMMITTED) — read first
+## 2026-07-07 — Brand-page redesign: browse toggle + card rails + full-screen
+## browse sheet; "Subscribe" vocabulary (UNCOMMITTED) — read first
+
+UI-polish session on the merchant/artist profile, post-demo. **All
+uncommitted** (HEAD `93f89d7`). tsc clean (pre-existing VideoCard error only).
+
+**Brand page redesigned (`app/artist/[artistId].tsx`):**
+- Hero carousel height `screenWidth × 1.2` → **`× 1.33`** (owner-tuned:
+  1.44 → 1.51 → 1.33; loading skeleton matches).
+- The 2026-07-04 collection chip tabs + EvenGrid product grid are **GONE**
+  from the profile. In their place, below bio/location: the Shop screen's
+  segmented toggle (**Collections | Categories**) + a horizontal rail of
+  Home-category-style cards (145×190, image + black/40 scrim + label;
+  collection cards also show item counts). `EvenGrid` import dropped (now
+  0 consumers — add to the dead-code cleanup list).
+- Card tap → **NEW `app/merchant-browse.tsx`** — full-screen slide-up sheet
+  (`presentation: 'fullScreenModal'`, registered in `app/_layout.tsx`).
+  Header = name + COLLECTION/CATEGORY micro-label + chevron.down dismiss.
+  Body = the exact Home-feed grid (ProductCard pairs, server bookmarks +
+  local likes, auth gating, infinite scroll, pull-to-refresh, shared
+  EmptyState, anatomy-matched skeletons). Filters via existing
+  `useMerchantProducts(username, {collection}|{clothingType})`.
+- Subscribe/Contact buttons + the screen's error/retry CTAs: `rounded-full`
+  → default `rounded-lg` (app-standard rectangles).
+
+**Categories rail data path (the gotcha):** `useCategories(null)` NEVER
+fires (`enabled: gender !== null` — Home's home-lifestyle contract). Fix:
+`getCategories()` genderType is now optional (omitted → `GET /api/categories`
+unfiltered) + new **`useAllCategories()`** hook (24h cache) in
+`hooks/useHomeQueries.ts`. The brand's category slugs come from the
+unfiltered `useMerchantProducts` page-1 `categories[]`, cross-referenced
+against the platform chips for names + card images. Verified live:
+fieldsstore 10/10 slugs match, all with images. Owner flagged "solve it
+later" — the two-hook split works but could fold into one explicit-mode hook.
+
+**"Subscribe" vocabulary (UI copy ONLY — API/hooks/types still "follow"):**
+brand page button (Subscribe/Subscribed), Home Trending Brands pills, hidden
+explore screen. athena's "Followers" stat cards → "Subscribers" (see
+athena/CHANGELOG.md). nuwa audited: NEW_FOLLOWER is enum-only, no copy exists.
+
+**Backend this session (nuwa, see its STATUS.md):** collection-cover
+fallback in the profile endpoint — every collection tab now has an image
+(merchant-set cover wins, else first ACTIVE product's primary image).
+Demo :3005 runs it; 100% coverage verified across all 8 demo brands.
+
+**▶ NEXT:** (a) commit all three repos; (b) on-device pass of the new browse
+flow (toggle, rails, sheet); (c) profile feels shorter without the grid —
+candidates: stats line (subscribers · products) under the name, new-arrivals
+preview rail; (d) parked polish list from the 2026-07-07 UI read (empty-state
+consolidation, bookmarks safe-area hardcoded pt-16, header bg consistency,
+artist modal chevron color, checkout shadow dedupe, dead-code cleanup incl.
+EvenGrid); (e) hero flat black/30 overlay → bottom gradient scrim still open.
+
+---
+
+## 2026-07-04 — Brand-page collection tabs (SUPERSEDED 2026-07-07: chip tabs
+## replaced by the browse rails above; the API work below still powers them)
 
 The merchant/artist page catalogue tabs now mirror **the brand's own site
 sections** (owner requirement). The old YIIVA-category chips are replaced by
