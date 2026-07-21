@@ -5,8 +5,8 @@
 // The /api (mobile envelope) endpoints keep using lib/api-client.ts — it pulls
 // its optional auth header from getOptionalAuthHeader() below.
 
-import { Platform } from 'react-native';
 import { useAuthStore, type AuthUser } from './auth-store';
+import { API_ORIGIN } from './api-origin';
 import {
   loadRefreshToken,
   saveRefreshToken,
@@ -14,17 +14,11 @@ import {
 } from './secure-storage';
 
 /**
- * Auth endpoints live at the server root (no /api prefix).
- * EXPO_PUBLIC_API_URL (see .env) overrides for the demo backend; otherwise the
- * platform default (iOS localhost / Android 10.0.2.2).
+ * Auth endpoints live at the server root (no /api prefix). Origin resolution
+ * is shared with the /api client — see lib/api-origin.ts (the socket.io /chat
+ * connection also builds on this).
  */
-export const AUTH_BASE =
-  process.env.EXPO_PUBLIC_API_URL ??
-  Platform.select({
-    ios: 'http://localhost:3000',
-    android: 'http://10.0.2.2:3000',
-    default: 'http://localhost:3000',
-  });
+export const AUTH_BASE = API_ORIGIN;
 
 export class ApiError extends Error {
   constructor(

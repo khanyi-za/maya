@@ -21,7 +21,7 @@ import {
   useTrackProductView,
 } from '@/hooks/useProductQueries';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useAddCartItem } from '@/hooks/useCartQueries';
+import { useAddCartItem, useCart } from '@/hooks/useCartQueries';
 import { useAuthStore } from '@/lib/auth-store';
 import { useSocialStore } from '@/lib/social-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,6 +159,22 @@ export default function ProductScreen() {
   const variants: ProductVariant[] = product?.variants ?? [];
   const selectedVariant = variants.find((v) => v.id === selectedVariantId);
   const similarProducts = similarQuery.data?.products ?? [];
+
+  // "Already in cart" state, at cart-line granularity (productId + variantId).
+  // With variants: no size selected → any variant in cart counts (tap goes to
+  // the cart); selecting a NOT-yet-carted size flips back to "Add to cart" so
+  // other sizes stay addable. Guests never match (empty cart shape).
+  const cartItems = useCart().data?.cart.items ?? [];
+  const inCart = product
+    ? cartItems.some(
+        (item) =>
+          item.productId === product.id &&
+          (variants.length === 0 ||
+            (selectedVariant
+              ? item.variantId === selectedVariant.id
+              : item.variantId !== null))
+      )
+    : false;
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -484,13 +500,19 @@ export default function ProductScreen() {
       >
         <Text className="text-[24px] font-bold text-foreground mr-4">{formatZAR(product.price)}</Text>
         <Button
-          variant="brand"
+          variant={inCart ? 'outline' : 'brand'}
           className="flex-1"
           loading={addItem.isPending}
-          disabled={soldOut || addItem.isPending}
-          onPress={handleAddToCart}
+          disabled={(soldOut && !inCart) || addItem.isPending}
+          onPress={inCart ? () => router.push('/(tabs)/cart') : handleAddToCart}
         >
-          {soldOut ? 'Sold out' : addItem.isPending ? 'Adding…' : 'Add to cart'}
+          {inCart
+            ? 'In cart · View cart'
+            : soldOut
+              ? 'Sold out'
+              : addItem.isPending
+                ? 'Adding…'
+                : 'Add to cart'}
         </Button>
       </View>
     </View>

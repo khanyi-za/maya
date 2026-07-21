@@ -3,6 +3,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  Alert,
   Dimensions,
   RefreshControl,
   ScrollView,
@@ -29,6 +30,7 @@ import { useRequireAuth, useToggleFollow } from '@/hooks/useSocialMutations';
 import { imageSource } from '@/lib/image-source';
 import { haptics } from '@/lib/haptics';
 import { APIError } from '@/lib/api-client';
+import { merchantLocations, type MerchantLocation } from '@/lib/merchant-locations';
 import {
   useMerchantProfile,
   useMerchantProducts,
@@ -82,6 +84,70 @@ function BrowseCard({
         )}
       </View>
     </TouchableOpacity>
+  );
+}
+
+/**
+ * Collapsible store-locations list for the bio section. Collapsed it reads
+ * like the old one-line location row (pin + city, or "N locations"); expanded
+ * it lists each storefront with its address. Data is mock per-brand fixtures
+ * until nuwa serves real locations (see lib/merchant-locations.ts).
+ */
+function LocationsDropdown({ locations }: { locations: MerchantLocation[] }) {
+  const [open, setOpen] = useState(false);
+  const colors = useThemeColors();
+
+  if (locations.length === 0) return null;
+
+  const collapsedLabel =
+    locations.length === 1 ? locations[0].city : `${locations.length} locations`;
+
+  // City-only fallback (brands without owner-supplied storefronts): render a
+  // plain location line — no chevron, nothing to expand.
+  if (locations.length === 1 && !locations[0].address) {
+    return (
+      <View className="flex-row items-center gap-1.5 py-1">
+        <IconSymbol name="location.fill" size={14} color={colors.mutedForeground} />
+        <Text variant="caption">{collapsedLabel}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <TouchableOpacity
+        className="flex-row items-center gap-1.5 self-start py-1"
+        onPress={() => {
+          haptics.light();
+          setOpen((prev) => !prev);
+        }}
+      >
+        <IconSymbol name="location.fill" size={14} color={colors.mutedForeground} />
+        <Text variant="caption">{collapsedLabel}</Text>
+        <IconSymbol
+          name={open ? 'chevron.up' : 'chevron.down'}
+          size={11}
+          color={colors.mutedForeground}
+        />
+      </TouchableOpacity>
+
+      {open && (
+        <View className="mt-2 gap-3 rounded-lg bg-muted px-4 py-3.5">
+          {locations.map((loc) => (
+            <View key={loc.id} className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <IconSymbol name="mappin.and.ellipse" size={16} color={colors.brand} />
+              </View>
+              <View className="flex-1">
+                <Text variant="label">{loc.label}</Text>
+                {loc.address ? <Text variant="caption">{loc.address}</Text> : null}
+                <Text variant="caption">{loc.city}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -180,10 +246,23 @@ export default function ArtistProfileScreen() {
 
   // Cross-reference the brand's category slugs against the platform chip
   // list (name + card image) — the same imagery the Home rail uses.
+  // FIELDS-only for now (owner call 2026-07-09): swap each card's platform
+  // image for the brand's OWN product shot in that category
+  // (`categoryCovers` from the merchant-products endpoint). Drop the
+  // username gate to roll brand-own covers out to every profile.
   const brandCategories = React.useMemo(() => {
-    const slugs = new Set(productsQuery.data?.pages[0]?.categories ?? []);
-    return (categoriesQuery.data?.categories ?? []).filter((c) => slugs.has(c.slug));
-  }, [productsQuery.data, categoriesQuery.data]);
+    const firstPage = productsQuery.data?.pages[0];
+    const slugs = new Set(firstPage?.categories ?? []);
+    const covers =
+      username === 'fieldsstore'
+        ? new Map(
+            (firstPage?.categoryCovers ?? []).map((c) => [c.slug, c.image])
+          )
+        : null;
+    return (categoriesQuery.data?.categories ?? [])
+      .filter((c) => slugs.has(c.slug))
+      .map((c) => ({ ...c, image: covers?.get(c.slug) ?? c.image }));
+  }, [productsQuery.data, categoriesQuery.data, username]);
 
   const heroMediaItems = React.useMemo(
     () =>
@@ -199,10 +278,20 @@ export default function ArtistProfileScreen() {
   const handleFollow = () => {
     if (!merchant || !requireAuth()) return;
     haptics.light();
-    toggleFollow(
+    const isCurrentlySubscribed = resolveFollowed(
+      followed,
       merchant.id,
-      resolveFollowed(followed, merchant.id, merchant.isFollowedByMe)
+      merchant.isFollowedByMe
     );
+    toggleFollow(merchant.id, isCurrentlySubscribed);
+    // Confirm on subscribe only (nothing on unsubscribe) — UI copy says
+    // "Subscribe"; the API vocabulary stays "follow".
+    if (!isCurrentlySubscribed) {
+      Alert.alert(
+        'Subscribed',
+        `You will now get notifications when ${merchant.displayName} releases new items.`
+      );
+    }
   };
   const handleContact = () => setShowContactModal(true);
 
@@ -515,12 +604,7 @@ export default function ArtistProfileScreen() {
               {merchant.bio}
             </Text>
           ) : null}
-          {merchant.location ? (
-            <View className="flex-row items-center gap-1.5">
-              <IconSymbol name="location.fill" size={14} color={colors.mutedForeground} />
-              <Text variant="caption">{merchant.location}</Text>
-            </View>
-          ) : null}
+          <LocationsDropdown locations={merchantLocations(username)} />
         </View>
 
         {/* Browse toggle — the Shop screen's segmented control, scoped to

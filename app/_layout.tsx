@@ -76,10 +76,16 @@ export default function RootLayout() {
             <Stack>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="product/[productId]" options={{ headerShown: false }} />
-              {/* Brand collection/category explorer — slides up over the profile. */}
+              {/* Brand collection/category explorer — slides up over the
+                  profile. Deliberately NOT presentation:'fullScreenModal':
+                  card screens pushed from inside a native modal (product
+                  detail, artist link) stack invisibly BEHIND it, and back()
+                  then pops those ghosts instead of closing the sheet. A card
+                  screen with a bottom slide keeps the sheet feel without the
+                  modal presentation context. */}
               <Stack.Screen
                 name="merchant-browse"
-                options={{ headerShown: false, presentation: 'fullScreenModal' }}
+                options={{ headerShown: false, animation: 'slide_from_bottom' }}
               />
               <Stack.Screen name="+not-found" />
             </Stack>

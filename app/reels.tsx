@@ -12,6 +12,7 @@ import {
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { haptics } from '@/lib/haptics';
@@ -40,6 +41,11 @@ export default function ReelsScreen() {
     REELS.length - 1,
   );
   const [activeIndex, setActiveIndex] = useState(startIndex);
+  const [muted, setMuted] = useState(false);
+  // Playback follows navigation focus: closing the feed OR pushing away
+  // (Buy → product, merchant tap) pauses the active reel immediately —
+  // without this the audio kept playing behind the next screen.
+  const isFocused = useIsFocused();
 
   const onViewRef = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems[0];
@@ -56,7 +62,12 @@ export default function ReelsScreen() {
         data={REELS}
         keyExtractor={(r) => r.id}
         renderItem={({ item, index }) => (
-          <ReelItem reel={item} active={index === activeIndex} insets={insets} />
+          <ReelItem
+            reel={item}
+            active={index === activeIndex && isFocused}
+            muted={muted}
+            insets={insets}
+          />
         )}
         pagingEnabled
         showsVerticalScrollIndicator={false}
@@ -76,6 +87,21 @@ export default function ReelsScreen() {
       >
         <IconSymbol name="xmark" size={22} color="#fff" />
       </Pressable>
+
+      <Pressable
+        style={[styles.muteButton, { top: insets.top + 12 }]}
+        onPress={() => {
+          haptics.light();
+          setMuted((m) => !m);
+        }}
+        hitSlop={12}
+      >
+        <IconSymbol
+          name={muted ? 'speaker.slash' : 'speaker.wave.2'}
+          size={20}
+          color="#fff"
+        />
+      </Pressable>
     </View>
   );
 }
@@ -83,10 +109,12 @@ export default function ReelsScreen() {
 function ReelItem({
   reel,
   active,
+  muted,
   insets,
 }: {
   reel: ReelFixture;
   active: boolean;
+  muted: boolean;
   insets: EdgeInsets;
 }) {
   const router = useRouter();
@@ -95,10 +123,26 @@ function ReelItem({
   });
 
   // Only the on-screen reel plays (FlatList windowing keeps a few mounted).
+  // Mute is driven here too — the setup callback runs once at creation, so
+  // live state must be applied in an effect (same lesson as the brand hero).
   useEffect(() => {
+    player.muted = muted;
     if (active) player.play();
     else player.pause();
-  }, [active, player]);
+  }, [active, muted, player]);
+
+  // Safety net for the audio-after-close leak: expo-video's release on
+  // unmount can lag the pop animation — stop playback explicitly. The catch
+  // guards the case where the native player was already released.
+  useEffect(() => {
+    return () => {
+      try {
+        player.pause();
+      } catch {
+        // already released — nothing to stop
+      }
+    };
+  }, [player]);
 
   // Like is local-only (v1); bookmark is server-backed + auth-gated.
   const likedProducts = useSocialStore((s) => s.likedProducts);
@@ -216,6 +260,16 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  muteButton: {
+    position: 'absolute',
+    right: 16,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   info: {
     position: 'absolute',

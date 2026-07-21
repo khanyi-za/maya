@@ -1,13 +1,73 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-07-07 (session close)
+> Last updated: 2026-07-09 (session close)
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
 
 ---
 
+## 2026-07-09 — Bug-fix + FIELDS-demo round: portable API origin, browse-sheet
+## nav fix, in-cart button, locations dropdown, reel audio (UNCOMMITTED)
+
+Bug-cleanout + demo-polish session before the FIELDS pitch. **All
+uncommitted.** tsc clean (known VideoCard error only), lint clean. nuwa's
+companion work (feed shuffle + FIELDS spotlight, trending chips, brand-scoped
+similar, category covers, 7 new demo brands → 15): nuwa/STATUS.md top entry.
+
+**⚠ NETWORKING FIX (user-verified on-device):** the app now works on ANY
+wifi/hotspot with zero .env edits. NEW `lib/api-origin.ts` — origin =
+`EXPO_PUBLIC_API_URL` override → **Metro's `Constants.expoConfig.hostUri`
+host + `EXPO_PUBLIC_API_PORT`** (=3005 demo / 3000 dev) → platform localhost
+fallback. REST (`api-client.ts`), auth (`api.ts` AUTH_BASE) and the chat
+socket all share it. `.env` rewritten: no more hardcoded LAN IP (that was
+why cafe/hotspot demos showed no content). NEVER hardcode an IP again;
+`expo start -c` after .env changes.
+
+**Bug fixes:**
+- **merchant-browse ghost-stack** (`app/_layout.tsx`): was
+  `presentation:'fullScreenModal'` — product/artist pushes from inside it
+  stacked INVISIBLY behind the modal and back() popped ghosts (the "can't
+  open product / can't close sheet" bug). Now a card screen with
+  `animation:'slide_from_bottom'` (sheet feel kept). Comment in the layout
+  warns against restoring the modal.
+- **Reel audio** (`app/reels.tsx`): NEW mute toggle (top-right speaker,
+  session-global) + audio-kept-playing-after-close fixed — playback now
+  gated on `useIsFocused()` (also stops on Buy/merchant push, resumes on
+  return) + guarded pause-on-unmount safety net.
+
+**Product screen (`app/product/[productId].tsx`):** bottom-bar button is now
+cart-state-aware — in cart → outline **"In cart · View cart"** → cart tab;
+variant-granular (selected size counts; other sizes stay addable); guests +
+sold-out-but-carted handled. Derives live from the `['cart']` cache.
+Optional follow-up: the "Added to cart" Alert is now redundant.
+
+**Brand profile (`app/artist/[artistId].tsx`):**
+- NEW **Locations dropdown** (replaces the one-line city row) + NEW
+  `lib/merchant-locations.ts` fixtures (1–2 mock storefronts per demo brand,
+  ⚠ SWAP POINT header). **fieldsstore's 4 entries are REAL (owner-supplied
+  2026-07-09):** Old Biscuit Mill, V&A Waterfront, De Wet Square
+  Stellenbosch, 44 Stanley. tolthema's mock moved to Melrose Arch to avoid
+  colliding with the real FIELDS at 44 Stanley.
+- **Categories rail: FIELDS-only brand-own card covers** via the new
+  `categoryCovers` API field (typed in api-client, defensive-optional).
+  Drop the `username === 'fieldsstore'` gate to roll out to all brands.
+- **Subscribe popup**: subscribing now confirms "You will now get
+  notifications when {brand} releases new items." (unsubscribe silent).
+  ⚠ Promise is ahead of plumbing — no new-release notification exists in
+  nuwa yet.
+
+**▶ NEXT:** (a) **commit maya + nuwa**; (b) on-device pass of this round:
+reel mute/close audio, in-cart button flip, browse-sheet product taps +
+chevron close, locations dropdown, FIELDS category covers + spotlighted
+feed; (c) backlog unchanged: profile "feels short" (stats line /
+new-arrivals rail), hero gradient scrim, dead-code cleanup (EvenGrid,
+MasonryGrid, video-player, VideoCard, dummy-data, home-fixtures,
+chat-store), reels → dynamic backend feed, CC-1 envelope harmonisation.
+
+---
+
 ## 2026-07-07 — Brand-page redesign: browse toggle + card rails + full-screen
-## browse sheet; "Subscribe" vocabulary (UNCOMMITTED) — read first
+## browse sheet; "Subscribe" vocabulary (COMMITTED at d072939) — read first
 
 UI-polish session on the merchant/artist profile, post-demo. **All
 uncommitted** (HEAD `93f89d7`). tsc clean (pre-existing VideoCard error only).

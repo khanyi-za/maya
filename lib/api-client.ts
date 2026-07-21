@@ -1,9 +1,9 @@
 // Yiiva REST API Client
 // This file contains all API endpoint functions for the mobile app
 
-import { Platform } from 'react-native';
 import { homeFixtures } from './home-fixtures';
 import { getOptionalAuthHeader } from './api';
+import { API_ORIGIN } from './api-origin';
 
 // =============================================================================
 // API CONFIGURATION
@@ -16,20 +16,8 @@ import { getOptionalAuthHeader } from './api';
  */
 export const USE_FIXTURES = false;
 
-/**
- * Backend origin.
- * - EXPO_PUBLIC_API_URL (see .env) overrides everything — set it to the demo
- *   backend (e.g. http://localhost:3005) or a LAN IP for a physical device.
- * - Otherwise falls back to the platform default:
- *   iOS Simulator reaches localhost directly; Android Emulator needs 10.0.2.2.
- */
-const API_ORIGIN =
-  process.env.EXPO_PUBLIC_API_URL ??
-  Platform.select({
-    ios: 'http://localhost:3000',
-    android: 'http://10.0.2.2:3000',
-    default: 'http://localhost:3000',
-  });
+// Backend origin resolution (Metro-host-derived, network-portable) lives in
+// lib/api-origin.ts.
 const API_BASE_URL = `${API_ORIGIN}/api`;
 
 // =============================================================================
@@ -1284,6 +1272,8 @@ export async function getMerchantProducts(
 ): Promise<{
   products: Product[];
   categories: string[];
+  /** Brand-own card image per category (one of the brand's product shots). */
+  categoryCovers: { slug: string; image: string | null }[];
   pagination: CursorPagination;
 }> {
   const queryParams = new URLSearchParams();
@@ -1307,8 +1297,14 @@ export async function getMerchantProducts(
   const { data, pagination } = await fetchAPIPaginated<{
     products: Product[];
     categories: string[];
+    categoryCovers?: { slug: string; image: string | null }[];
   }>(endpoint);
-  return { products: data.products, categories: data.categories, pagination };
+  return {
+    products: data.products,
+    categories: data.categories,
+    categoryCovers: data.categoryCovers ?? [],
+    pagination,
+  };
 }
 
 /**
