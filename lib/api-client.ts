@@ -221,7 +221,7 @@ export interface CheckoutQuote {
 
 /**
  * POST /api/orders result — the maya "order" is the PaymentGroup. `payment`
- * carries the PayFast form payload for WebView auto-submit.
+ * carries the hosted-checkout redirect for the payment WebView.
  */
 export interface PlaceOrderResult {
   order: {
@@ -232,9 +232,15 @@ export interface PlaceOrderResult {
   };
   payment: {
     type: 'redirect';
-    paymentUrl: string;
-    actionUrl: string;
-    fields: Record<string, string>;
+    /**
+     * Provider-neutral redirect: GET → load `url` directly (Paystack);
+     * POST → render `fields` as a hidden form against `url` and auto-submit.
+     */
+    redirect: {
+      url: string;
+      method: 'GET' | 'POST';
+      fields?: Record<string, string>;
+    };
     returnUrl: string;
   };
 }
@@ -938,13 +944,15 @@ export async function getCheckoutQuote(addressId: string): Promise<CheckoutQuote
 
 /**
  * Commit the checkout (auth required). Creates the orders + PaymentGroup and
- * returns the PayFast redirect payload. 409 STOCK_DRIFT / CART_EMPTY.
+ * returns the payment redirect payload. 409 STOCK_DRIFT / CART_EMPTY.
  * Backend: POST /api/orders (docs/api/orders.md §1)
  */
 export async function placeOrder(params: {
   addressId: string;
   returnUrl: string;
   cancelUrl: string;
+  /** Restricts Paystack's hosted page to the chosen method (card | eft | qr). */
+  paymentMethod?: 'card' | 'eft' | 'qr';
 }): Promise<PlaceOrderResult> {
   return fetchAPI<PlaceOrderResult>(`/orders`, {
     method: 'POST',

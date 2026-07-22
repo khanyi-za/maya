@@ -10,7 +10,7 @@ import { clearPaymentSession, getPaymentSession } from '@/lib/payment-session';
 
 // Must match checkout.tsx's RETURN_URL/CANCEL_URL prefix. The WebView intercepts
 // navigation to this https sentinel (it never actually loads) to detect the
-// payment outcome — PayFast rejects custom-scheme return URLs.
+// payment outcome — payment providers reject custom-scheme return URLs.
 const RETURN_SCHEME = 'https://yiiva.co.za/payment-return';
 
 function escapeHtml(value: string): string {
@@ -21,15 +21,19 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export default function PayfastScreen() {
+export default function PaymentScreen() {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const session = useMemo(getPaymentSession, []);
   const finished = useRef(false);
 
+  // Provider-neutral redirect (contract v3): GET providers (Paystack) give a
+  // plain URL to load; a POST provider would give signed form fields.
+  const redirect = useMemo(() => session?.payment.redirect ?? null, [session]);
+
   const html = useMemo(() => {
-    if (!session) return '';
-    const inputs = Object.entries(session.payment.fields)
+    if (!redirect || redirect.method !== 'POST') return '';
+    const inputs = Object.entries(redirect.fields ?? {})
       .map(
         ([name, value]) =>
           `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(String(value))}" />`
@@ -39,12 +43,12 @@ export default function PayfastScreen() {
 <html>
   <head><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
   <body style="background:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:-apple-system,sans-serif;color:#666">
-    Redirecting to PayFast…
-    <form id="payfast" action="${escapeHtml(session.payment.actionUrl)}" method="post">${inputs}</form>
-    <script>document.getElementById('payfast').submit();</script>
+    Redirecting to secure checkout…
+    <form id="pay" action="${escapeHtml(redirect.url)}" method="post">${inputs}</form>
+    <script>document.getElementById('pay').submit();</script>
   </body>
 </html>`;
-  }, [session]);
+  }, [redirect]);
 
   const finish = (status: 'success' | 'cancelled') => {
     if (finished.current) return;
@@ -65,7 +69,7 @@ export default function PayfastScreen() {
     ]);
   };
 
-  if (!session) {
+  if (!session || !redirect) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
@@ -96,7 +100,11 @@ export default function PayfastScreen() {
       </View>
 
       <WebView
-        source={{ html, baseUrl: 'https://app.yiiva.co.za' }}
+        source={
+          redirect.method === 'GET'
+            ? { uri: redirect.url }
+            : { html, baseUrl: 'https://app.yiiva.co.za' }
+        }
         originWhitelist={['*']}
         startInLoadingState
         renderLoading={() => (

@@ -12,7 +12,6 @@ import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
@@ -44,10 +43,11 @@ const SA_PROVINCES = [
   'Western Cape',
 ];
 
-// PayFast validates return_url/cancel_url as http(s) and rejects custom schemes
-// (a yiivaapp:// deep link → "url format is invalid", 400). We use an https
-// sentinel on a real domain; the WebView intercepts navigation to it
-// (onShouldStartLoadWithRequest) before it ever loads — see app/payfast.tsx.
+// Payment providers validate return/callback URLs as http(s) and reject
+// custom schemes (a yiivaapp:// deep link → 400 — learned the hard way on
+// PayFast; Paystack's callback_url is the same). We use an https sentinel on
+// a real domain; the WebView intercepts navigation to it
+// (onShouldStartLoadWithRequest) before it ever loads — see app/payment.tsx.
 const RETURN_URL = 'https://yiiva.co.za/payment-return?status=success';
 const CANCEL_URL = 'https://yiiva.co.za/payment-return?status=cancelled';
 
@@ -61,12 +61,36 @@ const EMPTY_ADDRESS_FORM = {
   postalCode: '',
 };
 
-// Roadmap payment methods — shown on the Payment step but not integrated;
-// checkout is PayFast-only in v1.
-const MOCK_PAYMENT_METHODS: { name: string; caption?: string }[] = [
-  { name: 'Apple Pay' },
-  { name: 'Card', caption: 'Pay directly with your bank card' },
-  { name: 'Payflex', caption: 'Pay in 4, interest-free' },
+// Real, selectable payment methods — each maps to a Paystack channel, so the
+// choice genuinely restricts the hosted payment page to that method.
+// Channels verified live against the Paystack account (card/eft/qr active;
+// apple_pay not yet enabled — add it back here once activated). Payflex is
+// the one roadmap row (rendered disabled with a Soon tag).
+type PayChannel = 'card' | 'eft' | 'qr';
+const PAYMENT_METHODS: {
+  id: PayChannel;
+  title: string;
+  caption: string;
+  icon: string;
+}[] = [
+  {
+    id: 'card',
+    title: 'Add card / Pay with card',
+    caption: 'Visa or Mastercard — entered securely at payment',
+    icon: 'creditcard',
+  },
+  {
+    id: 'eft',
+    title: 'Pay by bank',
+    caption: 'Instant EFT with Ozow — all major SA banks',
+    icon: 'building.columns',
+  },
+  {
+    id: 'qr',
+    title: 'SnapScan',
+    caption: 'Scan and pay with the SnapScan app',
+    icon: 'qrcode',
+  },
 ];
 
 // 3-step checkout: the address is chosen in Delivery and re-confirmed on
@@ -135,6 +159,7 @@ export default function CheckoutScreen() {
   const placeOrderMutation = usePlaceOrder();
 
   const [step, setStep] = useState<Step>(1);
+  const [paymentMethod, setPaymentMethod] = useState<PayChannel>('card');
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS_FORM);
@@ -223,12 +248,13 @@ export default function CheckoutScreen() {
         addressId: selectedAddressId,
         returnUrl: RETURN_URL,
         cancelUrl: CANCEL_URL,
+        paymentMethod,
       },
       {
         onSuccess: (result) => {
           haptics.success();
           setPaymentSession(result);
-          router.push('/payfast');
+          router.push('/payment');
         },
         onError: (err) => {
           if (err instanceof APIError && err.code === 'STOCK_DRIFT') {
@@ -460,82 +486,95 @@ export default function CheckoutScreen() {
         next step first.
       </Text>
 
-      <Card className="overflow-hidden border-2 border-brand bg-brand-subtle">
-        <View className="p-4">
-          <View className="flex-row items-center gap-3">
-            <View className="h-10 w-10 items-center justify-center rounded-lg bg-card">
-              <IconSymbol name="creditcard" size={24} color={colors.foreground} />
-            </View>
-            <View className="flex-1">
-              <Text variant="label" className="mb-0.5">
-                PayFast
-              </Text>
-              <Text variant="caption">
-                Card, Instant EFT and more — secure checkout
-              </Text>
-            </View>
-            <View className="ml-3 h-5 w-5 items-center justify-center rounded-full border-2 border-brand">
-              <View className="h-2.5 w-2.5 rounded-full bg-brand" />
-            </View>
-          </View>
-        </View>
-      </Card>
-
-      {/* Mock methods — displayed for the roadmap, not integrated yet.
-          Inert "Soon" rows (same convention as SideMenu's dead links). */}
-      <Text variant="caption" className="mb-2 mt-6 font-semibold text-muted-foreground">
-        More ways to pay
-      </Text>
-      <View className="overflow-hidden rounded-xl border border-border">
-        {MOCK_PAYMENT_METHODS.map((method, i) => (
-          <View
-            key={method.name}
-            className={cn(
-              'flex-row items-center gap-3 p-4',
-              i < MOCK_PAYMENT_METHODS.length - 1 && 'border-b border-border'
-            )}
-          >
-            <View className="h-5 w-5 rounded-full border-2 border-border" />
-            <View className="flex-1">
-              <View className="flex-row items-center gap-2">
-                <Text variant="label" className="text-muted-foreground">
-                  {method.name}
-                </Text>
-                <Badge tone="neutral">Soon</Badge>
-              </View>
-              {method.caption && (
-                <Text variant="caption" className="mt-0.5 text-muted-foreground">
-                  {method.caption}
-                </Text>
+      {/* Single-select method list (Baymard: one-column, ≥44pt targets,
+          action-verb labels, brand marks as trust signals). Selection is
+          REAL — it restricts the Paystack hosted page to that channel. */}
+      <View className="gap-3">
+        {PAYMENT_METHODS.map((method) => {
+          const selected = paymentMethod === method.id;
+          return (
+            <TouchableOpacity
+              key={method.id}
+              activeOpacity={0.85}
+              className={cn(
+                'flex-row items-center gap-3 rounded-xl p-4',
+                selected
+                  ? 'border-2 border-brand bg-brand-subtle'
+                  : 'border border-border bg-card'
               )}
-            </View>
-            {method.name === 'Apple Pay' ? (
-              <View className="flex-row items-center gap-0.5 rounded-md border border-border px-2 py-1">
-                <IconSymbol name="apple.logo" size={12} color={colors.foreground} />
-                <Text className="text-[12px] font-semibold text-foreground">Pay</Text>
+              onPress={() => {
+                haptics.light();
+                setPaymentMethod(method.id);
+              }}
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-lg border border-border bg-card">
+                <IconSymbol
+                  name={method.icon as never}
+                  size={22}
+                  color={colors.foreground}
+                />
               </View>
-            ) : method.name === 'Card' ? (
-              <View className="flex-row items-center gap-2">
-                {/* Brand marks keep their real colors, like the disabled row in the Etsy reference */}
-                <Text style={{ color: '#1A1F71', fontStyle: 'italic', fontWeight: '800', fontSize: 13, letterSpacing: -0.5 }}>
-                  VISA
+              <View className="flex-1">
+                <Text variant="label" className="mb-0.5">
+                  {method.title}
                 </Text>
-                <View className="flex-row items-center">
-                  <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#EB001B' }} />
-                  <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#F79E1B', marginLeft: -7, opacity: 0.9 }} />
-                </View>
+                <Text variant="caption">{method.caption}</Text>
               </View>
-            ) : (
-              <Text className="text-[13px] font-bold lowercase text-foreground">payflex</Text>
-            )}
+              {method.id === 'card' && (
+                <View className="mr-1 flex-row items-center gap-2">
+                  <Text
+                    style={{
+                      color: '#1A1F71',
+                      fontStyle: 'italic',
+                      fontWeight: '800',
+                      fontSize: 12,
+                      letterSpacing: -0.5,
+                    }}
+                  >
+                    VISA
+                  </Text>
+                  <View className="flex-row items-center">
+                    <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#EB001B' }} />
+                    <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#F79E1B', marginLeft: -6, opacity: 0.9 }} />
+                  </View>
+                </View>
+              )}
+              <View
+                className={cn(
+                  'h-5 w-5 items-center justify-center rounded-full border-2',
+                  selected ? 'border-brand' : 'border-border'
+                )}
+              >
+                {selected && <View className="h-2.5 w-2.5 rounded-full bg-brand" />}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Payflex — the one roadmap method, deliberately inert. */}
+        <View className="flex-row items-center gap-3 rounded-xl border border-border p-4 opacity-60">
+          <View className="h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted">
+            <IconSymbol name="calendar" size={22} color={colors.mutedForeground} />
           </View>
-        ))}
+          <View className="flex-1">
+            <View className="flex-row items-center gap-2">
+              <Text variant="label" className="text-muted-foreground">
+                Payflex
+              </Text>
+              <Badge tone="neutral">Soon</Badge>
+            </View>
+            <Text variant="caption" className="mt-0.5 text-muted-foreground">
+              Pay in 4, interest-free
+            </Text>
+          </View>
+          <Text className="text-[13px] font-bold lowercase text-foreground">payflex</Text>
+        </View>
       </View>
 
       <View className="mt-4 flex-row items-center gap-2">
         <IconSymbol name="lock.fill" size={14} color={colors.mutedForeground} />
         <Text variant="caption" className="flex-1 text-muted-foreground">
-          Payments are processed securely by PayFast. YIIVA never sees your
+          Payments are processed securely by Paystack. YIIVA never sees your
           card details.
         </Text>
       </View>
@@ -599,8 +638,22 @@ export default function CheckoutScreen() {
           </TouchableOpacity>
         </View>
         <View className="flex-row items-center gap-3 rounded-xl bg-muted p-4">
-          <IconSymbol name="creditcard" size={20} color={colors.foreground} />
-          <Text variant="label">PayFast</Text>
+          <IconSymbol
+            name={
+              (PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.icon ??
+                'creditcard') as never
+            }
+            size={20}
+            color={colors.foreground}
+          />
+          <View className="flex-1">
+            <Text variant="label">
+              {PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.title ?? 'Card'}
+            </Text>
+            <Text variant="caption" className="mt-0.5">
+              Secured by Paystack
+            </Text>
+          </View>
         </View>
       </View>
 
