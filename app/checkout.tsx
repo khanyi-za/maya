@@ -24,6 +24,7 @@ import {
 } from '@/hooks/useCheckoutQueries';
 import { useAuthStore } from '@/lib/auth-store';
 import { APIError, type Address, type ServerCartItem } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 import { setPaymentSession } from '@/lib/payment-session';
 import { formatZAR } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
@@ -208,8 +209,17 @@ export default function CheckoutScreen() {
     }
   }, [authStatus, router]);
 
+  // Funnel: the delivery step counts once on entry, the later steps on each
+  // forward transition via goToStep.
+  useEffect(() => {
+    track('checkout_step_viewed', { step: 'delivery' });
+  }, []);
+
   const goToStep = (next: Step) => {
     haptics.light();
+    track('checkout_step_viewed', {
+      step: STEP_LABELS[next - 1].toLowerCase(),
+    });
     setStep(next);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
@@ -253,6 +263,12 @@ export default function CheckoutScreen() {
       {
         onSuccess: (result) => {
           haptics.success();
+          track('order_placed', {
+            paymentMethod,
+            totalInCents: quote?.total ?? null,
+            itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+            brandCount: groups.length,
+          });
           setPaymentSession(result);
           router.push('/payment');
         },
@@ -504,6 +520,7 @@ export default function CheckoutScreen() {
               )}
               onPress={() => {
                 haptics.light();
+                track('payment_method_selected', { method: method.id });
                 setPaymentMethod(method.id);
               }}
             >

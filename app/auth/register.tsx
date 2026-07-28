@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/text';
 import { useThemeColors } from '@/lib/theme';
 import { register } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
+import { track } from '@/lib/analytics';
 
 // Mirrors the backend rule: min 8 chars with uppercase, lowercase, and a digit.
 function passwordProblem(password: string): string | null {
@@ -58,6 +59,7 @@ export default function RegisterScreen() {
         lastName: lastName.trim(),
         ...(phone.trim() ? { phone: phone.trim() } : {}),
       });
+      track('sign_up_submitted');
       router.replace({ pathname: '/auth/check-email', params: { email: cleanEmail } });
     } catch (err) {
       if (err instanceof ApiError) {

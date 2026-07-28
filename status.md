@@ -1,8 +1,66 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-07-09 (session close)
+> Last updated: 2026-07-24 (session close)
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
+
+---
+
+## 2026-07-24 — PostHog product analytics (Layer 1) wired app-wide
+## (UNCOMMITTED)
+
+Behavioral analytics shipped: **posthog-react-native** (EU cloud, POPIA)
+across every key surface. tsc baseline-clean (VideoCard only), lint
+baseline-clean, iOS bundle exports (5.48 MB). **⚠ All uncommitted.**
+
+**Architecture (`lib/analytics.ts` — read this first):** module-level
+PostHog singleton (most capture sites are plain TS, not components);
+`PostHogProvider client=` wraps the root tree in `app/_layout.tsx` for
+future component hooks. **Hard no-op when `EXPO_PUBLIC_POSTHOG_API_KEY` is
+empty** (the dev default — app behaves identically). Typed
+`AnalyticsEvent` union — no stringly-typed captures. Screen tracking =
+manual `useScreenTracking()` (expo-router `usePathname`/`useSegments`,
+reports the route PATTERN `/product/[productId]`, ids live on the events).
+
+**Identity seam (`lib/auth-store.ts`):** `setAuthenticated` →
+`identifyUser(user.id, {role})` (PII-minimal — no email/name in person
+props v1) — single choke point covering login, verify-email auto-login,
+cold-start + foreground refresh. `setGuest` → `reset()` **only on
+authenticated→guest** (cold-start guest must NOT reset — would rotate the
+anon id and break guest→signup stitching).
+
+**Event taxonomy (18 events), co-located with the existing phalo backend
+feeds (recordProductView/recordMerchantView/trackSearch untouched):**
+product_viewed · brand_viewed · search_performed · search_result_clicked ·
+add_to_cart · remove_from_cart (cart.tsx `removeNow` now takes the ITEM,
+both call sites updated) · checkout_step_viewed (mount + goToStep) ·
+payment_method_selected · order_placed · payment_cancelled ·
+purchase_completed (order-success poll landing on confirmed, ref-guarded
+once) · reel_viewed · reel_watched (active-effect cleanup clock, <500ms
+skipped; `active` folds in nav focus so Buy-push stops the clock) ·
+reel_buy_tapped · brand_subscribed/_unsubscribed · wishlist_toggled ·
+sign_up_submitted. Hooks extended: `useTrackProductView` gained optional
+summary param; `useTrackMerchantView` gained username param.
+
+**Deps added:** posthog-react-native ^4.60 + expo-file-system/-application/
+-localization (SDK-matched; expo-localization self-registered its config
+plugin in app.json). `.env` gained the two POSTHOG vars (key EMPTY =
+disabled).
+
+**LIVE-VERIFIED (2026-07-24, owner on-device):** PostHog org created on EU
+Cloud, `phc_…` key in `.env` (the key is PUBLIC — safe to commit knowledge
+of, but `.env` stays gitignored), events confirmed flowing in PostHog →
+Activity against demo nuwa :3005. ⚠ Free plan = **1 project per org** —
+athena instrumentation later needs pay-as-you-go (card; ~1M events/mo still
+free) for a second project, or an `app` property on a shared project.
+
+**▶ NEXT:** (a) commit; (b) build the day-one insights in PostHog:
+feed→product→cart→checkout→paid funnel, funnel-by-source, checkout step
+drop-off; (c) later:
+session replay needs the dev build (bundle with the push-notification
+build); Layer 2 (nuwa /api/events for phalo) parked as its own session;
+backlog otherwise unchanged (reels dynamic feed, suburb field on the
+address form, dead-code cleanup, CC-1).
 
 ---
 

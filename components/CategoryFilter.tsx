@@ -15,6 +15,8 @@ interface CategoryFilterProps {
   categories?: Category[];
   /** Hide the synthetic "All" chip (e.g. Search, where "All" is meaningless). */
   showAll?: boolean;
+  /** Gender-aware covers for the "All" chip's 2×2 collage (API `allImages` — each distinct from every category cover). */
+  allImages?: string[];
 }
 
 // TODO: Replace with actual category-specific images
@@ -44,9 +46,11 @@ interface Chip {
   value: string;
   label: string;
   image: any;
+  /** 4 images → the chip renders a 2×2 collage instead of a single cover ("All"). */
+  collage?: string[];
 }
 
-export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false, categories, showAll = true }: CategoryFilterProps) {
+export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false, categories, showAll = true, allImages }: CategoryFilterProps) {
   const [selectedValue, setSelectedValue] = useState('All');
   const apiDriven = categories !== undefined;
 
@@ -65,8 +69,18 @@ export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', search
   if (apiDriven) {
     if (categories.length === 0) return null;
     chips = [
+      // The "All" chip renders a 2×2 collage of the API's gender-aware
+      // `allImages` (each distinct from every category chip) — a single
+      // borrowed image made "All" a visual duplicate of its neighbour. With
+      // fewer than 4 images it degrades to a single cover, then to the first
+      // category's image.
       ...(showAll
-        ? [{ value: 'All', label: 'All', image: getLocalAsset(getCategoryImage('All', primaryFilter)) }]
+        ? [{
+            value: 'All',
+            label: 'All',
+            image: imageSource(allImages?.[0] ?? categories[0].image),
+            collage: allImages && allImages.length >= 4 ? allImages.slice(0, 4) : undefined,
+          }]
         : []),
       ...categories.map((c) => ({ value: c.slug, label: c.displayName, image: imageSource(c.image) })),
     ];
@@ -96,7 +110,19 @@ export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', search
               onPress={() => handleCategoryPress(chip.value)}
               activeOpacity={0.9}
             >
-              {chip.image ? (
+              {chip.collage ? (
+                <View className="h-full w-full flex-row flex-wrap">
+                  {chip.collage.map((url) => (
+                    <Image
+                      key={url}
+                      source={imageSource(url)}
+                      style={{ width: '50%', height: '50%' }}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  ))}
+                </View>
+              ) : chip.image ? (
                 <Image source={chip.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
               ) : (
                 <View className="h-full w-full bg-muted" />

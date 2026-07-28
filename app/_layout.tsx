@@ -7,12 +7,14 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PostHogProvider } from 'posthog-react-native';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
 import { useAuthHydration, useForegroundRefresh } from '@/lib/auth';
 import { usePushNotificationTaps, usePushRegistration } from '@/lib/push';
+import { posthog, useScreenTracking } from '@/lib/analytics';
 
 // Create QueryClient instance with mobile-optimized configuration
 const queryClient = new QueryClient({
@@ -54,6 +56,9 @@ export default function RootLayout() {
   usePushRegistration();
   usePushNotificationTaps();
 
+  // PostHog screen events per route change (no-op when no API key).
+  useScreenTracking();
+
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -68,31 +73,45 @@ export default function RootLayout() {
     return null;
   }
 
+  const content = (
+    <QueryClientProvider client={queryClient}>
+      <FilterProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="product/[productId]" options={{ headerShown: false }} />
+            {/* Brand collection/category explorer — slides up over the
+                profile. Deliberately NOT presentation:'fullScreenModal':
+                card screens pushed from inside a native modal (product
+                detail, artist link) stack invisibly BEHIND it, and back()
+                then pops those ghosts instead of closing the sheet. A card
+                screen with a bottom slide keeps the sheet feel without the
+                modal presentation context. */}
+            <Stack.Screen
+              name="merchant-browse"
+              options={{ headerShown: false, animation: 'slide_from_bottom' }}
+            />
+            {/* New Arrivals "See All" — same slide-up-sheet treatment (and the
+                same no-fullScreenModal rule) as merchant-browse. */}
+            <Stack.Screen
+              name="new-arrivals"
+              options={{ headerShown: false, animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+        </ThemeProvider>
+      </FilterProvider>
+    </QueryClientProvider>
+  );
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <FilterProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="product/[productId]" options={{ headerShown: false }} />
-              {/* Brand collection/category explorer — slides up over the
-                  profile. Deliberately NOT presentation:'fullScreenModal':
-                  card screens pushed from inside a native modal (product
-                  detail, artist link) stack invisibly BEHIND it, and back()
-                  then pops those ghosts instead of closing the sheet. A card
-                  screen with a bottom slide keeps the sheet feel without the
-                  modal presentation context. */}
-              <Stack.Screen
-                name="merchant-browse"
-                options={{ headerShown: false, animation: 'slide_from_bottom' }}
-              />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-          </ThemeProvider>
-        </FilterProvider>
-      </QueryClientProvider>
+      {posthog ? (
+        <PostHogProvider client={posthog}>{content}</PostHogProvider>
+      ) : (
+        content
+      )}
     </GestureHandlerRootView>
   );
 }

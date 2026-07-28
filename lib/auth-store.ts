@@ -3,6 +3,8 @@
 
 import { create } from 'zustand';
 
+import { identifyUser, resetAnalytics } from './analytics';
+
 /**
  * The user object as auth endpoints actually return it (login / verify-email /
  * refresh all return this slim shape). The full profile — accountStatus,
@@ -30,11 +32,22 @@ interface AuthStore {
   updateAccessToken: (token: string) => void;
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   state: { status: 'loading' },
-  setAuthenticated: (user, accessToken) =>
-    set({ state: { status: 'authenticated', user, accessToken } }),
-  setGuest: () => set({ state: { status: 'guest' } }),
+  setAuthenticated: (user, accessToken) => {
+    // Analytics identify seam — this setter is the single choke point for
+    // every session-establishment path (login, verify-email auto-login,
+    // cold-start refresh in lib/api.ts, foreground refresh).
+    identifyUser(user);
+    set({ state: { status: 'authenticated', user, accessToken } });
+  },
+  setGuest: () => {
+    // Reset analytics identity ONLY on sign-out (authenticated→guest).
+    // Cold-start guest resolution also lands here — resetting then would
+    // rotate the anonymous id and break guest→signup journey stitching.
+    if (get().state.status === 'authenticated') resetAnalytics();
+    set({ state: { status: 'guest' } });
+  },
   setLoading: () => set({ state: { status: 'loading' } }),
   updateAccessToken: (token) =>
     set((s) =>

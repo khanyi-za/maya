@@ -506,7 +506,12 @@ export interface MerchantProfile {
  */
 export interface ProductVariant {
   id: string;
-  size: string;
+  /** Pure size option — null for colour-only variants. */
+  size: string | null;
+  /** Colour option — the screen groups the selector by it when >1 colour. */
+  color: string | null;
+  /** Display fallback (the variant's name) when size is null. */
+  label: string;
   sku: string | null;
   available: boolean;
   stockCount: number;
@@ -535,9 +540,11 @@ export interface ProductDetail {
   isBookmarkedByMe?: boolean;
   likeCount?: number;
   returnPolicy: {
-    windowDays: number;
-    type: string;
+    /** 'store' = the brand's own Shopify policy; 'platform' = YIIVA fallback copy. */
+    source: 'store' | 'platform';
     displayText: string;
+    /** The store's full policy text (plain), when source === 'store'. */
+    fullText: string | null;
   };
 }
 
@@ -749,17 +756,28 @@ export async function getFeaturedProducts(params?: {
 export async function getNewArrivals(params: {
   genderType: GenderType;
   limit?: number;
-}): Promise<{ products: CarouselProduct[] }> {
+  /** Offset cursor — the "See All" browse screen pages; the rail omits it. */
+  cursor?: string;
+}): Promise<{ products: Product[]; pagination: CursorPagination }> {
   if (USE_FIXTURES) {
-    return { products: homeFixtures.newArrivals(params.genderType) };
+    return {
+      products: homeFixtures.newArrivals(params.genderType) as unknown as Product[],
+      pagination: { limit: 6, nextCursor: null, hasMore: false },
+    };
   }
 
   const queryParams = new URLSearchParams({
     genderType: params.genderType,
     limit: String(params.limit || 6),
   });
+  if (params.cursor) queryParams.set('cursor', params.cursor);
 
-  return fetchAPI<{ products: CarouselProduct[] }>(`/products/new-arrivals?${queryParams}`);
+  // Feed-card shape since the See-All screen shipped (incl. merchant.username
+  // — the rail's brand links are finally live).
+  const { data, pagination } = await fetchAPIPaginated<{ products: Product[] }>(
+    `/products/new-arrivals?${queryParams}`
+  );
+  return { products: data.products, pagination };
 }
 
 /**
@@ -768,7 +786,7 @@ export async function getNewArrivals(params: {
  */
 export async function getCategories(params: {
   genderType?: GenderType;
-}): Promise<{ categories: Category[] }> {
+}): Promise<{ categories: Category[]; allImages?: string[] }> {
   if (USE_FIXTURES) {
     return { categories: homeFixtures.categories(params.genderType ?? 'women') };
   }
@@ -778,8 +796,13 @@ export async function getCategories(params: {
   if (!params.genderType) {
     return fetchAPI<{ categories: Category[] }>('/categories');
   }
+  // Gendered calls also carry `allImages` — up to 4 gender-appropriate covers
+  // for the synthetic "All" chip's collage, each distinct from every
+  // category's own cover.
   const queryParams = new URLSearchParams({ genderType: params.genderType });
-  return fetchAPI<{ categories: Category[] }>(`/categories?${queryParams}`);
+  return fetchAPI<{ categories: Category[]; allImages?: string[] }>(
+    `/categories?${queryParams}`,
+  );
 }
 
 /**

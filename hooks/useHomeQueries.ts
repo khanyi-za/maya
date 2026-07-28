@@ -40,6 +40,26 @@ export function useNewArrivals(gender: GenderType | null) {
   });
 }
 
+/**
+ * Cursor-paginated new arrivals for the "See All" browse screen — same
+ * brand-diverse recency ordering as the rail, just the whole list.
+ */
+export function useNewArrivalsBrowse(gender: GenderType | null) {
+  return useInfiniteQuery({
+    queryKey: ['products', 'new-arrivals', 'browse', gender],
+    queryFn: ({ pageParam }) =>
+      getNewArrivals({
+        genderType: gender as GenderType,
+        limit: 20,
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    staleTime: 10 * 60 * 1000,
+    enabled: gender !== null,
+  });
+}
+
 export function useTrendingMerchants(gender: GenderType | null) {
   return useQuery({
     queryKey: ['merchants', 'trending', gender],

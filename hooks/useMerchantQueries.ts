@@ -9,6 +9,7 @@ import {
   getMerchantProducts,
   recordMerchantView,
 } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 
 export function useMerchantProfile(username: string | undefined) {
   return useQuery({
@@ -47,12 +48,13 @@ export function useMerchantProducts(
 const lastViewFiredAt = new Map<string, number>();
 
 /** Fire the profile-view POST once the merchant id is known. Best-effort. */
-export function useTrackMerchantView(merchantId: string | undefined) {
+export function useTrackMerchantView(merchantId: string | undefined, username?: string) {
   useEffect(() => {
     if (!merchantId) return;
     const last = lastViewFiredAt.get(merchantId) ?? 0;
     if (Date.now() - last < 30 * 1000) return;
     lastViewFiredAt.set(merchantId, Date.now());
     recordMerchantView(merchantId).catch(() => {});
-  }, [merchantId]);
+    track('brand_viewed', { merchantId, username: username ?? null });
+  }, [merchantId, username]);
 }

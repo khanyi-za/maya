@@ -15,6 +15,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { imageSource } from '@/lib/image-source';
 import { formatZAR } from '@/lib/format';
 import { APIError, type Media, type ProductVariant } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 import {
   useProductDetail,
   useSimilarProducts,
@@ -145,6 +146,8 @@ export default function ProductScreen() {
   const productId = params.productId as string;
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState('');
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [policyExpanded, setPolicyExpanded] = useState(false);
   const addItem = useAddCartItem();
   const authStatus = useAuthStore((s) => s.state.status);
   const { toggleLike, isLiked } = useSocialStore();
@@ -153,12 +156,43 @@ export default function ProductScreen() {
 
   const detailQuery = useProductDetail(productId);
   const similarQuery = useSimilarProducts(productId);
-  useTrackProductView(productId, detailQuery.isSuccess);
+  useTrackProductView(productId, detailQuery.isSuccess, {
+    name: detailQuery.data?.product.name,
+    priceInCents: detailQuery.data?.product.price,
+    merchant: detailQuery.data?.product.merchant?.username,
+  });
 
   const product = detailQuery.data?.product;
   const variants: ProductVariant[] = product?.variants ?? [];
   const selectedVariant = variants.find((v) => v.id === selectedVariantId);
   const similarProducts = similarQuery.data?.products ?? [];
+
+  // Colour grouping: with >1 distinct colour the selector splits into a
+  // colour row + size chips filtered to the chosen colour. Colour-only
+  // products (no size option) select the variant directly from the colour
+  // row. Single/no-colour products behave exactly as before.
+  const colorOptions = [
+    ...new Set(variants.map((v) => v.color).filter((c): c is string => !!c)),
+  ];
+  const multiColor = colorOptions.length > 1;
+  const effectiveColor = multiColor ? (selectedColor ?? colorOptions[0]) : null;
+  const visibleVariants = multiColor
+    ? variants.filter((v) => v.color === effectiveColor)
+    : variants;
+  const hasSizes = visibleVariants.some((v) => v.size);
+
+  const handleColorSelect = (color: string) => {
+    haptics.light();
+    setSelectedColor(color);
+    const inColor = variants.filter((v) => v.color === color);
+    if (!inColor.some((v) => v.size)) {
+      // Colour-only product: the colour IS the variant.
+      setSelectedVariantId(inColor.find((v) => v.available)?.id ?? '');
+    } else if (selectedVariant && selectedVariant.color !== color) {
+      // Size picked under another colour no longer applies.
+      setSelectedVariantId('');
+    }
+  };
 
   // "Already in cart" state, at cart-line granularity (productId + variantId).
   // With variants: no size selected → any variant in cart counts (tap goes to
@@ -180,7 +214,11 @@ export default function ProductScreen() {
     if (!product) return;
 
     if (variants.length > 0 && !selectedVariant) {
-      Alert.alert('Select a size', 'Please select a size before adding to cart.');
+      const noun = hasSizes ? 'size' : 'colour';
+      Alert.alert(
+        `Select a ${noun}`,
+        `Please select a ${noun} before adding to cart.`,
+      );
       return;
     }
 
@@ -202,6 +240,14 @@ export default function ProductScreen() {
       {
         onSuccess: () => {
           haptics.success();
+          track('add_to_cart', {
+            productId: product.id,
+            variantId: selectedVariant?.id ?? null,
+            size: selectedVariant?.size ?? null,
+            color: selectedVariant?.color ?? null,
+            priceInCents: product.price,
+            merchant: product.merchant?.username ?? null,
+          });
           Alert.alert('Added to cart', `${product.name} is in your cart.`);
         },
         onError: (err) => {
@@ -388,22 +434,73 @@ export default function ProductScreen() {
             </View>
           ) : null}
 
-          {/* Payment Options (informational — dead "3 OPTIONS" CTA removed) */}
+          {/* Payment Options — the methods checkout actually offers (Paystack
+              channels). Pay-later (Payflex etc.) is a post-launch decision;
+              don't promise it here until it exists. */}
           <View className="py-4 border-b border-border">
-            <Text variant="label" className="mb-2">Get it now, pay later</Text>
+            <Text variant="label" className="mb-2">Ways to pay</Text>
             <Text variant="caption">
-              Pay using our credit options, Payflex, PayJustNow, Mobicred or RCS.
+              Pay securely at checkout with card, instant EFT, or SnapScan.
             </Text>
           </View>
 
-          {/* Size Selector (dead SIZE INFO / FIND YOUR FIT CTAs removed) */}
-          {variants.length > 0 && (
+          {/* Colour Selector — only when the product genuinely comes in
+              multiple colours. Text chips (colour names are merchant-authored;
+              hex swatches would be guesswork). */}
+          {multiColor && (
+            <View className="py-4 border-b border-border">
+              <Text variant="label" className="mb-4">Select a colour</Text>
+
+              <View className="flex-row flex-wrap gap-3">
+                {colorOptions.map((color) => {
+                  const isSelected = effectiveColor === color;
+                  const anyAvailable = variants.some(
+                    (v) => v.color === color && v.available,
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={color}
+                      className={cn(
+                        'px-6 py-3 rounded-full active:scale-95',
+                        isSelected
+                          ? 'border-2 border-brand bg-brand-subtle'
+                          : 'border border-border',
+                        !anyAvailable && 'bg-muted border-border',
+                      )}
+                      onPress={() => {
+                        if (!anyAvailable) return;
+                        handleColorSelect(color);
+                      }}
+                      disabled={!anyAvailable}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Colour ${color}${anyAvailable ? '' : ', sold out'}`}
+                    >
+                      <Text
+                        variant="label"
+                        className={cn(
+                          isSelected && 'text-brand',
+                          !anyAvailable && 'text-muted-foreground line-through',
+                        )}
+                      >
+                        {color}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {/* Size Selector (dead SIZE INFO / FIND YOUR FIT CTAs removed) —
+              filtered to the chosen colour when a colour row is showing. */}
+          {variants.length > 0 && hasSizes && (
             <View className="py-4 border-b border-border">
               <Text variant="label" className="mb-4">Select a size</Text>
 
               <View className="flex-row flex-wrap gap-3">
-                {variants.map((variant) => {
+                {visibleVariants.map((variant) => {
                   const isSelected = selectedVariantId === variant.id;
+                  const sizeLabel = variant.size ?? variant.label;
                   return (
                     <TouchableOpacity
                       key={variant.id}
@@ -421,7 +518,7 @@ export default function ProductScreen() {
                       }}
                       disabled={!variant.available}
                       accessibilityRole="button"
-                      accessibilityLabel={`Size ${variant.size}${variant.available ? '' : ', sold out'}`}
+                      accessibilityLabel={`Size ${sizeLabel}${variant.available ? '' : ', sold out'}`}
                     >
                       <Text
                         variant="label"
@@ -430,7 +527,7 @@ export default function ProductScreen() {
                           !variant.available && 'text-muted-foreground line-through',
                         )}
                       >
-                        {variant.size}
+                        {sizeLabel}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -439,7 +536,9 @@ export default function ProductScreen() {
             </View>
           )}
 
-          {/* Shipping (dead "When will I get it?" CTA removed) */}
+          {/* Shipping — honest platform copy: shipping on YIIVA is always the
+              real per-store Courier Guy rate quoted at checkout. No free-over-X
+              promise, no collection option — neither exists. */}
           <View className="py-4 border-b border-border">
             <Text variant="label" className="mb-4">Shipping</Text>
 
@@ -448,26 +547,49 @@ export default function ProductScreen() {
                 <IconSymbol name="shippingbox" size={17} color={colors.foreground} />
               </View>
               <View className="flex-1">
-                <Text variant="body" className="font-medium mb-0.5">FREE Standard delivery on purchases over R650.</Text>
-                <Text variant="caption">Faster options available.</Text>
+                <Text variant="body" className="font-medium mb-0.5">Shipped door-to-door via The Courier Guy.</Text>
+                <Text variant="caption">Exact delivery rate calculated at checkout.</Text>
               </View>
             </View>
 
             <View className="flex-row items-center">
               <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-muted">
-                <IconSymbol name="storefront" size={17} color={colors.foreground} />
+                <IconSymbol name="location" size={17} color={colors.foreground} />
               </View>
               <View className="flex-1">
-                <Text variant="body" className="font-medium mb-0.5">FREE Collection on purchases over R650.</Text>
-                <Text variant="caption">Open 7 days a week.</Text>
+                <Text variant="body" className="font-medium mb-0.5">Track every step in the app.</Text>
+                <Text variant="caption">Live updates from dispatch to delivery.</Text>
               </View>
             </View>
           </View>
 
-          {/* Returns */}
+          {/* Returns — the brand's own policy (from their Shopify) when
+              captured, collapsible; otherwise the honest platform copy. */}
           <View className="py-4 border-b border-border">
             <Text variant="label" className="mb-2">Returns</Text>
             <Text variant="caption">{product.returnPolicy.displayText}</Text>
+            {product.returnPolicy.fullText ? (
+              <>
+                <Text
+                  variant="caption"
+                  className="mt-2"
+                  numberOfLines={policyExpanded ? undefined : 3}
+                >
+                  {product.returnPolicy.fullText}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    haptics.light();
+                    setPolicyExpanded((e) => !e);
+                  }}
+                  className="mt-1 self-start"
+                >
+                  <Text variant="label" className="text-[13px] text-brand">
+                    {policyExpanded ? 'Show less' : 'Read full policy'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
           </View>
 
         </View>

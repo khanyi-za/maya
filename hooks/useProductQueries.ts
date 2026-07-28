@@ -9,6 +9,7 @@ import {
   getSimilarProducts,
   recordProductView,
 } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 
 export function useProductDetail(productId: string | undefined) {
   return useQuery({
@@ -33,12 +34,25 @@ export function useSimilarProducts(productId: string | undefined) {
 const lastViewFiredAt = new Map<string, number>();
 
 /** Fire the view-tracking POST once the product has loaded. Best-effort. */
-export function useTrackProductView(productId: string | undefined, loaded: boolean) {
+export function useTrackProductView(
+  productId: string | undefined,
+  loaded: boolean,
+  summary?: { name?: string; priceInCents?: number; merchant?: string },
+) {
+  const name = summary?.name;
+  const priceInCents = summary?.priceInCents;
+  const merchant = summary?.merchant;
   useEffect(() => {
     if (!productId || !loaded) return;
     const last = lastViewFiredAt.get(productId) ?? 0;
     if (Date.now() - last < 30 * 1000) return;
     lastViewFiredAt.set(productId, Date.now());
     recordProductView(productId).catch(() => {});
-  }, [productId, loaded]);
+    track('product_viewed', {
+      productId,
+      name: name ?? null,
+      priceInCents: priceInCents ?? null,
+      merchant: merchant ?? null,
+    });
+  }, [productId, loaded, name, priceInCents, merchant]);
 }

@@ -12,6 +12,7 @@ import { Text } from '@/components/ui/text';
 import { useCart, useRemoveCartItem, useUpdateCartItem } from '@/hooks/useCartQueries';
 import { useAuthStore } from '@/lib/auth-store';
 import { APIError, type ServerCartItem } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 import { formatZAR } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { imageSource } from '@/lib/image-source';
@@ -86,15 +87,20 @@ export default function CartScreen() {
     if (items.length === 0) return;
     router.push('/checkout');
   };
-  const removeNow = (itemId: string) => {
+  const removeNow = (item: ServerCartItem) => {
     haptics.medium();
-    removeItem.mutate(itemId);
+    track('remove_from_cart', {
+      productId: item.productId,
+      variantId: item.variantId,
+      quantity: item.quantity,
+    });
+    removeItem.mutate(item.id);
   };
   // Trash tap confirms; swipe-to-delete is deliberate enough to skip it.
   const confirmRemove = (item: ServerCartItem) => {
     Alert.alert('Remove item', `Remove "${item.name}" from your cart?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeNow(item.id) },
+      { text: 'Remove', style: 'destructive', onPress: () => removeNow(item) },
     ]);
   };
   const handleQuantityChange = (item: ServerCartItem, nextQuantity: number) => {
@@ -118,7 +124,7 @@ export default function CartScreen() {
   const renderDeleteAction = (item: ServerCartItem) => () => (
     <TouchableOpacity
       className="mb-5 ml-3 w-20 items-center justify-center rounded-xl bg-danger"
-      onPress={() => removeNow(item.id)}
+      onPress={() => removeNow(item)}
       disabled={removeItem.isPending}
     >
       <IconSymbol name="trash.fill" size={20} color={colors.dangerForeground} />

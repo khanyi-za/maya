@@ -54,7 +54,8 @@
         {
           "photosPermission": "YIIVA needs access to your photos so you can share them in chat."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

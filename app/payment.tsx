@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { useThemeColors } from '@/lib/theme';
 import { clearPaymentSession, getPaymentSession } from '@/lib/payment-session';
+import { track } from '@/lib/analytics';
 
 // Must match checkout.tsx's RETURN_URL/CANCEL_URL prefix. The WebView intercepts
 // navigation to this https sentinel (it never actually loads) to detect the
@@ -54,6 +55,9 @@ export default function PaymentScreen() {
     if (finished.current) return;
     finished.current = true;
     const orderId = session?.order.id;
+    if (status === 'cancelled') {
+      track('payment_cancelled', { orderId: orderId ?? null });
+    }
     clearPaymentSession();
     if (status === 'success') {
       router.replace({ pathname: '/order-success', params: { orderId } });

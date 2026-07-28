@@ -38,6 +38,7 @@ import {
 } from '@/hooks/useSearchQueries';
 import { useCategories } from '@/hooks/useHomeQueries';
 import { trackSearch } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 
 const RECENT_SEARCHES_KEY = 'recent_searches';
 const MAX_RECENT = 5;
@@ -219,15 +220,20 @@ export default function SearchScreen() {
               artistId={product.merchant.username}
               onBookmark={() => handleBookmark(product)}
               onLike={() => handleLike(product.id)}
-              onPress={() =>
+              onPress={() => {
                 // Ranking feedback signal (phalo-search.md S2). Best-effort.
                 trackSearch({
                   q: effectiveQuery,
                   genderType: gender,
                   clickedProductId: product.id,
                   position: rowIndex * 2 + colIndex,
-                }).catch(() => {})
-              }
+                }).catch(() => {});
+                track('search_result_clicked', {
+                  query: effectiveQuery,
+                  productId: product.id,
+                  position: rowIndex * 2 + colIndex,
+                });
+              }}
               isLiked={isLiked(product.id)}
               isBookmarked={resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe)}
             />

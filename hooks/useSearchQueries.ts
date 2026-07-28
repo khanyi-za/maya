@@ -12,6 +12,7 @@ import {
   trackSearch,
   type GenderType,
 } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 
 /** Debounce a fast-changing value (contract: 250ms after the last keystroke). */
 export function useDebouncedValue<T>(value: T, delayMs = 250): T {
@@ -74,5 +75,6 @@ export function useTrackSearch(
     const q = query.trim();
     if (!q || resultCount === undefined) return;
     trackSearch({ q, genderType: gender, resultCount }).catch(() => {});
+    track('search_performed', { query: q, gender: gender ?? null, resultCount });
   }, [query, gender, resultCount]);
 }

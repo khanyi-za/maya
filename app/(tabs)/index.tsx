@@ -128,7 +128,9 @@ export default function HomeScreen() {
     toggleBookmark(product.id, resolveBookmarked(bookmarked, product.id, product.isBookmarkedByMe));
   };
   const handleLike = (productId: string) => toggleLike(productId);
-  const handleSeeAll = (_title: string) => router.push('/explore');
+  // New Arrivals "See All" → the slide-up browse sheet (was the scrapped
+  // /explore orphan screen).
+  const handleSeeAll = (_title: string) => router.push('/new-arrivals');
   const handleBrandPress = (username: string) => router.push(`/artist/${username}`);
 
   const handleRefresh = useCallback(() => {
@@ -222,11 +224,10 @@ export default function HomeScreen() {
       title="New Arrivals"
       products={newArrivals.map((p) => ({
         id: p.id,
-        image: imageSource(p.image),
+        image: imageSource(p.primaryImage),
         title: p.name,
         artistName: p.merchant.displayName,
-        // NOTE: /api/products/new-arrivals doesn't return merchant.username yet —
-        // when nuwa adds it, pass it here to make the rail's artist link live.
+        artistUsername: p.merchant.username,
         price: formatZAR(p.price),
       }))}
       onSeeAll={() => handleSeeAll('New Arrivals')}
@@ -335,6 +336,7 @@ export default function HomeScreen() {
             onCategoryChange={handleCategoryChange}
             primaryFilter={activePrimaryFilter}
             categories={categoriesQuery.data?.categories ?? []}
+            allImages={categoriesQuery.data?.allImages}
           />
         )}
         {renderBody()}

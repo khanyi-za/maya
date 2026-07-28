@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { useCancelOrder, useOrder } from '@/hooks/useOrderQueries';
 import { APIError } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
 import { ORDER_STATUS } from '@/lib/order-status';
@@ -50,6 +51,27 @@ export default function OrderSuccessScreen() {
     const handle = setTimeout(() => setLongWait(true), LONG_WAIT_MS);
     return () => clearTimeout(handle);
   }, [status]);
+
+  // Funnel terminus — fires once, when polling lands on a confirmed status.
+  // Client-side approximation; the Paystack webhook stays the money truth.
+  const purchaseTracked = useRef(false);
+  useEffect(() => {
+    if (purchaseTracked.current || !order) return;
+    if (
+      order.status === 'PENDING_PAYMENT' ||
+      order.status === 'PAYMENT_FAILED' ||
+      order.status === 'CANCELLED'
+    ) {
+      return;
+    }
+    purchaseTracked.current = true;
+    track('purchase_completed', {
+      orderId: orderId ?? null,
+      orderNumber: order.orderNumber,
+      totalInCents: order.total,
+      itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+    });
+  }, [order, orderId]);
 
   const handleContinueShopping = () => router.dismissTo('/(tabs)');
 

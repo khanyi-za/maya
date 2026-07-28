@@ -16,6 +16,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { haptics } from '@/lib/haptics';
+import { track } from '@/lib/analytics';
 import { REELS, type ReelFixture } from '@/lib/reels-fixtures';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
@@ -52,6 +53,13 @@ export default function ReelsScreen() {
     if (first?.index != null) setActiveIndex(first.index);
   });
   const viewConfigRef = useRef({ itemVisiblePercentThreshold: 80 });
+
+  // One reel_viewed per reel that becomes active (including the start reel).
+  useEffect(() => {
+    const reel = REELS[activeIndex];
+    if (!reel) return;
+    track('reel_viewed', { productId: reel.productId, index: activeIndex });
+  }, [activeIndex]);
 
   return (
     <View style={styles.container}>
@@ -131,6 +139,20 @@ function ReelItem({
     else player.pause();
   }, [active, muted, player]);
 
+  // Watch time: clock runs while this reel is the active one (`active`
+  // already folds in navigation focus, so Buy/merchant pushes stop it too).
+  // Captured on deactivate/unmount via the cleanup; sub-500ms flicks skipped.
+  useEffect(() => {
+    if (!active) return;
+    const startedAt = Date.now();
+    return () => {
+      const watchMs = Date.now() - startedAt;
+      if (watchMs >= 500) {
+        track('reel_watched', { productId: reel.productId, watchMs });
+      }
+    };
+  }, [active, reel.productId]);
+
   // Safety net for the audio-after-close leak: expo-video's release on
   // unmount can lag the pop animation — stop playback explicitly. The catch
   // guards the case where the native player was already released.
@@ -194,6 +216,7 @@ function ReelItem({
           label="Buy"
           onPress={() => {
             haptics.medium();
+            track('reel_buy_tapped', { productId: reel.productId });
             router.push(`/product/${reel.productId}`);
           }}
         />

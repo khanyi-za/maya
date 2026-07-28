@@ -30,6 +30,7 @@ import { useRequireAuth, useToggleFollow } from '@/hooks/useSocialMutations';
 import { imageSource } from '@/lib/image-source';
 import { haptics } from '@/lib/haptics';
 import { APIError } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 import { merchantLocations, type MerchantLocation } from '@/lib/merchant-locations';
 import {
   useMerchantProfile,
@@ -239,7 +240,7 @@ export default function ArtistProfileScreen() {
   const productsQuery = useMerchantProducts(username);
   const categoriesQuery = useAllCategories();
   const merchant = profileQuery.data?.merchant;
-  useTrackMerchantView(merchant?.id);
+  useTrackMerchantView(merchant?.id, username);
 
   // The brand's own site sections (StoreCollections, merchant-ordered).
   const collections = merchant?.collections ?? [];
@@ -284,6 +285,10 @@ export default function ArtistProfileScreen() {
       merchant.isFollowedByMe
     );
     toggleFollow(merchant.id, isCurrentlySubscribed);
+    track(isCurrentlySubscribed ? 'brand_unsubscribed' : 'brand_subscribed', {
+      merchantId: merchant.id,
+      username,
+    });
     // Confirm on subscribe only (nothing on unsubscribe) — UI copy says
     // "Subscribe"; the API vocabulary stays "follow".
     if (!isCurrentlySubscribed) {

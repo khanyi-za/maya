@@ -11,6 +11,7 @@ import {
   removeBookmark,
   unfollowMerchant,
 } from '@/lib/api-client';
+import { track } from '@/lib/analytics';
 import { useAuthStore } from '@/lib/auth-store';
 import { useServerSocial } from '@/lib/server-social';
 
@@ -46,6 +47,7 @@ export function useToggleBookmark() {
   return (productId: string, current: boolean) => {
     const next = !current;
     setBookmarked(productId, next);
+    track('wishlist_toggled', { productId, added: next });
     mutation.mutate({ productId, next });
   };
 }
