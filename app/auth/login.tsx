@@ -97,10 +97,21 @@ export default function LoginScreen() {
         {needsVerification ? (
           <View className="mb-4 rounded-xl bg-muted p-5">
             <Text variant="heading" className="mb-2">Verify your email first</Text>
-            <Text variant="body" className="text-muted-foreground">
-              We sent a verification link to {email.trim()}. Tap it on this device
-              to activate your account, then sign in.
+            <Text variant="body" className="mb-4 text-muted-foreground">
+              Your account isn&apos;t verified yet. Enter the 6-digit code we
+              emailed you — or request a fresh one on the next screen.
             </Text>
+            <Button
+              variant="brand"
+              onPress={() =>
+                router.push({
+                  pathname: '/auth/verify-email',
+                  params: { email: email.trim().toLowerCase() },
+                })
+              }
+            >
+              Enter Verification Code
+            </Button>
           </View>
         ) : (
           <>

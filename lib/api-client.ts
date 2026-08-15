@@ -512,6 +512,8 @@ export interface ProductVariant {
   color: string | null;
   /** Display fallback (the variant's name) when size is null. */
   label: string;
+  /** Hosted URL matching a media[] entry — the colour-selector gallery jump. */
+  image: string | null;
   sku: string | null;
   available: boolean;
   stockCount: number;

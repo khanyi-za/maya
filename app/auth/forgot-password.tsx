@@ -20,7 +20,6 @@ export default function ForgotPasswordScreen() {
   const colors = useThemeColors();
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
@@ -31,9 +30,11 @@ export default function ForgotPasswordScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      await forgotPassword(email.trim().toLowerCase());
+      const cleanEmail = email.trim().toLowerCase();
+      await forgotPassword(cleanEmail);
       // Always succeeds whether or not the email exists (security).
-      setSent(true);
+      // The reset screen collects the emailed code + the new password.
+      router.replace({ pathname: '/auth/reset-password', params: { email: cleanEmail } });
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         setError('Too many attempts. Wait a moment and try again.');
@@ -56,57 +57,39 @@ export default function ForgotPasswordScreen() {
           <IconSymbol name="chevron.left" size={26} color={colors.foreground} />
         </TouchableOpacity>
 
-        {sent ? (
-          <>
-            <View className="mb-6 h-16 w-16 items-center justify-center rounded-full bg-success-subtle">
-              <IconSymbol name="checkmark.circle.fill" size={44} color={colors.success} />
-            </View>
-            <Text variant="display" className="mb-3">Check your inbox</Text>
-            <Text variant="body" className="mb-6 text-muted-foreground">
-              If an account exists for {email.trim()}, we&apos;ve sent a link to
-              reset your password. The link is valid for one hour.
-            </Text>
-            <Button variant="brand" onPress={() => router.replace('/auth/login')}>
-              Back to Sign In
-            </Button>
-          </>
-        ) : (
-          <>
-            <Text variant="display" className="mb-3">Reset your password</Text>
-            <Text variant="body" className="mb-6 text-muted-foreground">
-              Enter the email you signed up with and we&apos;ll send you a reset
-              link.
-            </Text>
+        <Text variant="display" className="mb-3">Reset your password</Text>
+        <Text variant="body" className="mb-6 text-muted-foreground">
+          Enter the email you signed up with and we&apos;ll send you a 6-digit
+          reset code.
+        </Text>
 
-            {error && (
-              <View className="mb-4 rounded-[10px] bg-danger-subtle p-3.5">
-                <Text className="text-[14px] leading-[19px] text-danger">{error}</Text>
-              </View>
-            )}
-
-            <Input
-              className="mb-4"
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              textContentType="emailAddress"
-              onSubmitEditing={handleSubmit}
-              returnKeyType="send"
-              error={!!error}
-            />
-
-            <Button
-              variant="brand"
-              loading={submitting}
-              onPress={handleSubmit}
-            >
-              {submitting ? 'Sending…' : 'Send Reset Link'}
-            </Button>
-          </>
+        {error && (
+          <View className="mb-4 rounded-[10px] bg-danger-subtle p-3.5">
+            <Text className="text-[14px] leading-[19px] text-danger">{error}</Text>
+          </View>
         )}
+
+        <Input
+          className="mb-4"
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          onSubmitEditing={handleSubmit}
+          returnKeyType="send"
+          error={!!error}
+        />
+
+        <Button
+          variant="brand"
+          loading={submitting}
+          onPress={handleSubmit}
+        >
+          {submitting ? 'Sending…' : 'Send Reset Code'}
+        </Button>
       </View>
     </KeyboardAvoidingView>
   );

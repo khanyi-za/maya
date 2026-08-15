@@ -60,7 +60,7 @@ export default function RegisterScreen() {
         ...(phone.trim() ? { phone: phone.trim() } : {}),
       });
       track('sign_up_submitted');
-      router.replace({ pathname: '/auth/check-email', params: { email: cleanEmail } });
+      router.replace({ pathname: '/auth/verify-email', params: { email: cleanEmail, sent: '1' } });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {

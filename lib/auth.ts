@@ -41,15 +41,24 @@ export async function login(email: string, password: string): Promise<void> {
   useAuthStore.getState().setAuthenticated(res.user, res.accessToken);
 }
 
-/** POST /auth/verify-email — auto-login on success. */
-export async function verifyEmail(token: string): Promise<void> {
+/** POST /auth/verify-email — 6-digit OTP; auto-login on success. */
+export async function verifyEmail(email: string, code: string): Promise<void> {
   const res = await api<AuthTokensResponse>('/auth/verify-email', {
     method: 'POST',
     auth: 'none',
-    body: { token },
+    body: { email, code },
   });
   await saveRefreshToken(res.refreshToken);
   useAuthStore.getState().setAuthenticated(res.user, res.accessToken);
+}
+
+/** POST /auth/resend-verification — always 200s (never reveals registration). */
+export async function resendVerification(email: string): Promise<void> {
+  await api('/auth/resend-verification', {
+    method: 'POST',
+    auth: 'none',
+    body: { email },
+  });
 }
 
 /** Optimistic logout — local state clears instantly, API fires best-effort. */
@@ -81,12 +90,16 @@ export async function forgotPassword(email: string): Promise<void> {
   });
 }
 
-/** POST /auth/reset-password — revokes all sessions; does NOT auto-login. */
-export async function resetPassword(token: string, password: string): Promise<void> {
+/** POST /auth/reset-password — 6-digit OTP; revokes all sessions; does NOT auto-login. */
+export async function resetPassword(
+  email: string,
+  code: string,
+  password: string,
+): Promise<void> {
   await api('/auth/reset-password', {
     method: 'POST',
     auth: 'none',
-    body: { token, password },
+    body: { email, code, password },
   });
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -148,6 +148,8 @@ export default function ProductScreen() {
   const [selectedVariantId, setSelectedVariantId] = useState('');
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [policyExpanded, setPolicyExpanded] = useState(false);
+  const galleryRef = useRef<ScrollView>(null);
+  const pageRef = useRef<ScrollView>(null);
   const addItem = useAddCartItem();
   const authStatus = useAuthStore((s) => s.state.status);
   const { toggleLike, isLiked } = useSocialStore();
@@ -181,6 +183,20 @@ export default function ProductScreen() {
     : variants;
   const hasSizes = visibleVariants.some((v) => v.size);
 
+  // Jump the gallery to a variant's image (same URL string as its media[]
+  // entry, per the ProductVariant.imageUrl contract). No image / no match →
+  // no-op, gallery stays put. Returns whether a jump happened so callers can
+  // decide to reveal the gallery.
+  const jumpToVariantImage = (image: string | null): boolean => {
+    if (!image) return false;
+    const media = detailQuery.data?.product.media ?? [];
+    const idx = media.findIndex((m) => m.url === image);
+    if (idx < 0) return false;
+    galleryRef.current?.scrollTo({ x: idx * width, animated: true });
+    setCurrentMediaIndex(idx);
+    return true;
+  };
+
   const handleColorSelect = (color: string) => {
     haptics.light();
     setSelectedColor(color);
@@ -191,6 +207,16 @@ export default function ProductScreen() {
     } else if (selectedVariant && selectedVariant.color !== color) {
       // Size picked under another colour no longer applies.
       setSelectedVariantId('');
+    }
+    // Show the colour: its selected-size variant's image if one survives the
+    // switch, else the colour's first imaged variant — and slide the page
+    // back up so the buyer actually SEES the colourway change (the selector
+    // sits below the fold).
+    const representative =
+      inColor.find((v) => v.id === selectedVariantId && v.image) ??
+      inColor.find((v) => v.image);
+    if (jumpToVariantImage(representative?.image ?? null)) {
+      pageRef.current?.scrollTo({ y: 0, animated: true });
     }
   };
 
@@ -315,6 +341,7 @@ export default function ProductScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScrollView
+        ref={pageRef}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -362,6 +389,7 @@ export default function ProductScreen() {
           </TouchableOpacity>
 
           <ScrollView
+            ref={galleryRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -515,6 +543,7 @@ export default function ProductScreen() {
                         if (!variant.available) return;
                         haptics.light();
                         setSelectedVariantId(variant.id);
+                        jumpToVariantImage(variant.image);
                       }}
                       disabled={!variant.available}
                       accessibilityRole="button"
