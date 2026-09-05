@@ -1473,6 +1473,272 @@ export async function trackSearch(params: {
 }
 
 // =============================================================================
+// API ENDPOINTS - MERCHANT DASHBOARD ("Manage my store")
+// =============================================================================
+// The merchant operations surface. UI copy calls these "sales"; identifiers
+// stay "order" (sales-vocabulary convention). All routes are auth-required and
+// resolve the caller's store server-side — 404 NO_STORE for non-merchants.
+
+/** Raw nuwa OrderStatus — distinct from the buyer-consolidated MobileOrderStatus. */
+export type MerchantSaleStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'PROCESSING'
+  | 'READY_FOR_DISPATCH'
+  | 'DISPATCHED'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'CANCELLED'
+  | 'REFUND_REQUESTED'
+  | 'REFUNDED';
+
+export interface MerchantStore {
+  id: string;
+  displayName: string;
+  slug: string;
+  status:
+    | 'DRAFT'
+    | 'PENDING_REVIEW'
+    | 'APPROVED'
+    | 'PENDING_GO_LIVE'
+    | 'ACTIVE'
+    | 'SUSPENDED'
+    | 'CLOSED';
+  logoUrl: string | null;
+}
+
+export interface MerchantOverview {
+  window: { days: number; from: string; to: string };
+  revenue: {
+    valueInCents: number;
+    trendPct: number;
+    series: { date: string; valueInCents: number }[];
+  };
+  orders: { count: number; trendPct: number };
+  followers: { count: number; trendPct: number };
+  rating: { value: number; trendPct: number };
+  /** Live work-queue counts (all-time) for the "needs attention" strip. */
+  actionable: { newSales: number; preparing: number };
+}
+
+export interface MerchantOrderSummary {
+  id: string;
+  orderNumber: string;
+  status: MerchantSaleStatus;
+  subtotalInCents: number;
+  totalInCents: number;
+  itemCount: number;
+  buyerName: string;
+  placedAt: string;
+}
+
+export interface MerchantOrderDetail {
+  id: string;
+  orderNumber: string;
+  status: MerchantSaleStatus;
+  subtotalInCents: number;
+  shippingInCents: number;
+  discountInCents: number;
+  totalInCents: number;
+  notes: string | null;
+  cancelReason: string | null;
+  placedAt: string;
+  confirmedAt: string | null;
+  dispatchedAt: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+  buyer: { name: string; email: string; phone: string | null };
+  shippingAddress: {
+    recipientName: string;
+    phone: string;
+    addressLine1: string;
+    addressLine2: string | null;
+    city: string;
+    province: string;
+    postalCode: string;
+    country: string;
+  };
+  items: {
+    id: string;
+    productId: string;
+    variantId: string | null;
+    productTitle: string;
+    variantName: string | null;
+    productImageUrl: string | null;
+    quantity: number;
+    unitPriceInCents: number;
+    totalInCents: number;
+  }[];
+  payment: {
+    status: string;
+    amountGrossInCents: number;
+    platformCommissionInCents: number;
+    merchantPayoutInCents: number;
+  } | null;
+}
+
+export type MerchantCancelReason = 'OUT_OF_STOCK' | 'CANNOT_FULFILL' | 'OTHER';
+
+export interface LowStockVariant {
+  id: string;
+  name: string;
+  sku: string;
+  stock: number;
+  reservedStock: number;
+  availableStock: number;
+}
+
+export interface LowStockItem {
+  productId: string;
+  title: string;
+  status: string;
+  primaryImageUrl: string | null;
+  lowStockThreshold: number;
+  availableStock: number;
+  hasVariants: boolean;
+  lowVariants: LowStockVariant[];
+}
+
+export interface MerchantConversation {
+  id: string;
+  buyer: { id: string; name: string; avatar: string | null };
+  lastMessage: {
+    text: string | null;
+    sender: 'user' | 'merchant';
+    at: string;
+  } | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+}
+
+/** The caller's managed store, or 404 NO_STORE. GET /api/merchant/store */
+export async function getMerchantStore(): Promise<{ store: MerchantStore }> {
+  return fetchAPI<{ store: MerchantStore }>('/merchant/store');
+}
+
+/** 14-day KPI feed for the dashboard home. GET /api/merchant/overview */
+export async function getMerchantOverview(): Promise<MerchantOverview> {
+  return fetchAPI<MerchantOverview>('/merchant/overview');
+}
+
+/** Sales list, newest first, cursor-paginated. GET /api/merchant/orders */
+export async function getMerchantOrders(params?: {
+  status?: MerchantSaleStatus;
+  search?: string;
+  cursor?: string;
+}): Promise<{ orders: MerchantOrderSummary[]; pagination: CursorPagination }> {
+  const queryParams = new URLSearchParams();
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.cursor) queryParams.append('cursor', params.cursor);
+  const qs = queryParams.toString();
+
+  const { data, pagination } = await fetchAPIPaginated<{
+    orders: MerchantOrderSummary[];
+  }>(`/merchant/orders${qs ? `?${qs}` : ''}`);
+  return { orders: data.orders, pagination };
+}
+
+/** Full sale detail. GET /api/merchant/orders/:id */
+export async function getMerchantOrder(
+  orderId: string
+): Promise<{ order: MerchantOrderDetail }> {
+  return fetchAPI<{ order: MerchantOrderDetail }>(`/merchant/orders/${orderId}`);
+}
+
+/**
+ * Advance a sale (CONFIRMED→PROCESSING→READY_FOR_DISPATCH). Invalid moves
+ * throw APIError code INVALID_TRANSITION. POST /api/merchant/orders/:id/status
+ */
+export async function updateMerchantOrderStatus(
+  orderId: string,
+  status: 'PROCESSING' | 'READY_FOR_DISPATCH'
+): Promise<{ id: string; status: MerchantSaleStatus }> {
+  return fetchAPI(`/merchant/orders/${orderId}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  });
+}
+
+/**
+ * Merchant cancel (CONFIRMED/PROCESSING only — APIError CANNOT_CANCEL after).
+ * POST /api/merchant/orders/:id/cancel
+ */
+export async function cancelMerchantOrder(
+  orderId: string,
+  body: { reason: MerchantCancelReason; notes?: string }
+): Promise<{ id: string; status: MerchantSaleStatus }> {
+  return fetchAPI(`/merchant/orders/${orderId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** Low-stock alerts (reservation-aware, no pagination). GET /api/merchant/low-stock */
+export async function getMerchantLowStock(): Promise<{
+  items: LowStockItem[];
+  count: number;
+}> {
+  return fetchAPI<{ items: LowStockItem[]; count: number }>(
+    '/merchant/low-stock'
+  );
+}
+
+/** Buyer conversations for the managed store. GET /api/merchant/conversations */
+export async function getMerchantConversations(): Promise<{
+  conversations: MerchantConversation[];
+}> {
+  return fetchAPI<{ conversations: MerchantConversation[] }>(
+    '/merchant/conversations'
+  );
+}
+
+/**
+ * Thread history — same shape as the buyer surface, but pagination is nested
+ * inside data (not lifted), so this reads it from the payload directly.
+ * GET /api/merchant/conversations/:id/messages
+ */
+export async function getMerchantChatMessages(
+  conversationId: string,
+  params?: { limit?: number; before?: string; after?: string }
+): Promise<{ messages: ChatMessage[]; pagination: CursorPagination }> {
+  const queryParams = new URLSearchParams();
+  if (params?.limit) queryParams.append('limit', String(params.limit));
+  if (params?.before) queryParams.append('before', params.before);
+  if (params?.after) queryParams.append('after', params.after);
+  const qs = queryParams.toString();
+
+  return fetchAPI<{ messages: ChatMessage[]; pagination: CursorPagination }>(
+    `/merchant/conversations/${conversationId}/messages${qs ? `?${qs}` : ''}`
+  );
+}
+
+/** Reply as the merchant. POST /api/merchant/conversations/:id/messages */
+export async function sendMerchantChatMessage(
+  conversationId: string,
+  body: { text?: string; attachments?: ChatImageAttachment[]; orderRef?: string },
+  idempotencyKey: string
+): Promise<{ message: ChatMessage }> {
+  return fetchAPI<{ message: ChatMessage }>(
+    `/merchant/conversations/${conversationId}/messages`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+/** Merchant-side read marker. PATCH /api/merchant/conversations/:id/read */
+export async function markMerchantConversationRead(
+  conversationId: string
+): Promise<void> {
+  await fetchAPI(`/merchant/conversations/${conversationId}/read`, {
+    method: 'PATCH',
+  });
+}
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
@@ -1548,4 +1814,17 @@ export const api = {
   searchByMerchantName,
   getSearchSuggestions,
   trackSearch,
+
+  // Merchant dashboard ("Manage my store")
+  getMerchantStore,
+  getMerchantOverview,
+  getMerchantOrders,
+  getMerchantOrder,
+  updateMerchantOrderStatus,
+  cancelMerchantOrder,
+  getMerchantLowStock,
+  getMerchantConversations,
+  getMerchantChatMessages,
+  sendMerchantChatMessage,
+  markMerchantConversationRead,
 };

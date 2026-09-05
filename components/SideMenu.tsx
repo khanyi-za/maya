@@ -119,6 +119,13 @@ export function SideMenu({ visible, onClose }: SideMenuProps) {
             {/* Account */}
             <SectionLabel label="Account" />
             <MenuItem icon="person" label="Account" onPress={() => handleNavigation('/account')} />
+            {isAuthenticated && user?.role === 'MERCHANT' && (
+              <MenuItem
+                icon="storefront"
+                label="Manage my store"
+                onPress={() => handleNavigation('/merchant')}
+              />
+            )}
             {isAuthenticated && (
               <MenuItem
                 icon="rectangle.portrait.and.arrow.right"

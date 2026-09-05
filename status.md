@@ -1,13 +1,83 @@
 # YIIVA Mobile — Project Status
 
-> Last updated: 2026-07-24 (session close)
+> Last updated: 2026-09-02
 > Read `CLAUDE.md` first for durable project context.
 > Read this for **where the work is right now** and what to pick up next.
 
 ---
 
+## 2026-08-31 → 09-02 — MERCHANT DASHBOARD ("Manage my store") SHIPPED
+## (UNCOMMITTED — pairs with nuwa's api/merchant surface, commit TOGETHER)
+
+Merchants can now run day-to-day store ops from the phone. Plan-approved,
+e2e-verified against demo nuwa :3005. **⚠ The backend half is uncommitted
+in nuwa (`src/mobile/merchant/` + module exports + analytics `topProducts`)
+— these screens 404 against any nuwa build without it, so the two repos
+must be committed together.**
+
+**Screens (`app/merchant/`):**
+- `index.tsx` — dashboard home: greeting + store logo `Avatar
+  variant="logo"` + status Badge (all 7 store statuses mapped), **azure
+  gradient revenue hero** (`#0ea5e9→#0369a1`, 14d total, trend pill,
+  `HeroBars` sparkline, "N sales · avg R… per sale"), **Needs attention**
+  chips (new sales / preparing / unread / low stock — each deep-links with
+  a preselected filter) or an "All caught up" card, 3 KPI tiles (Sales /
+  Subscribers / Rating), Recent sales, NavRows with badges.
+- `sales/index.tsx` — list w/ filter pills All/New/Preparing/Ready,
+  `initialStatus` param, cursor infinite scroll, pull-to-refresh.
+- `sales/[orderId].tsx` — detail: items, totals incl. "Your payout"
+  (`payment.merchantPayoutInCents`), address; sticky actions
+  CONFIRMED→Start preparing, PROCESSING→Ready for courier, cancel w/
+  reasons OUT_OF_STOCK/CANNOT_FULFILL/OTHER. On `INVALID_TRANSITION`/
+  `CANNOT_CANCEL` → refetch + "This sale has moved on" (courier statuses
+  arrive via ShipLogic webhooks; no merchant action).
+- `stock.tsx` — read-only low-stock alerts, reservation-aware, per-variant
+  rows; edits stay on the web dashboard.
+- `messages/` — inbox + thread mirroring the buyer chat with perspective
+  reversed (`isMine = sender === 'merchant'`); REST history +
+  `openChatSocket()` fan-out + optimistic send w/ Idempotency-Key + read
+  marks. **Text-only v1.**
+
+**Wiring:** `lib/api-client.ts` +279 lines (11 merchant functions + types;
+merchant chat messages nest `pagination` INSIDE `data` — inherited from the
+buyer chat surface, don't "harmonise" without checking nuwa);
+`hooks/useMerchantDashboard.ts` (every query gated on
+`useIsMerchantSession()` so non-merchant deep links never fire doomed
+requests; conversations poll 30s; mutations invalidate orders+overview);
+`lib/merchant-sale-status.ts` — **separate from buyer `order-status.ts`**,
+keyed on RAW nuwa OrderStatus, sales vocabulary ("New sale"/"Preparing"/
+"Ready for courier"/"With courier").
+
+**Entry points** (role-gated `role === 'MERCHANT'`): SideMenu Account
+section "Manage my store" + account screen "My store" card. Guests get a
+sign-in prompt; authed non-merchants get a "for YIIVA merchants" screen.
+⚠ **v1 gap:** store EMPLOYEES with role BUYER see no entry point (backend
+authorizes them via store membership — client gate is role-based).
+
+**2026-09-02 fix session:** (a) dashboard Avatar now actually shows the
+store logo (`uri={store.logoUrl}` + `variant="logo"` — was always falling
+back to the initial); (b) replaced broken opacity-modifier classes
+(`border-warning/40`, `border-brand/40`, `bg-success/15`) with `-subtle`
+tokens — Tailwind v3 can't compose alpha on our `var()`-based colors
+(CLAUDE.md gotcha); chips are now borderless subtle-tinted pills like
+Badge. `text-white/*` in the hero is fine (literal color).
+
+**Not done / parked:** no PostHog events on any merchant screen; `search`
+param supported by the API but no search box; `followers.trendPct`/
+`rating.trendPct` typed but unrendered; `storefront` SF Symbol needs
+iOS 17+ (Android MAPPING covered).
+
+**▶ NEXT:** (a) COMMIT maya together with nuwa (repo convention msg
+", on DD/MM/YYYY"); (b) release blockers unchanged: EXPO_PUBLIC_API_URL
+for prod builds (hostUri is undefined in prod → silent localhost), EAS
+projectId (push no-ops without it), NSAllowsArbitraryLoads removal,
+universal links, square app icon; (c) merchant PostHog events; (d) reels
+fixtures → dynamic feed before any non-demo DB.
+
+---
+
 ## 2026-07-24 — PostHog product analytics (Layer 1) wired app-wide
-## (UNCOMMITTED)
+## (COMMITTED since)
 
 Behavioral analytics shipped: **posthog-react-native** (EU cloud, POPIA)
 across every key surface. tsc baseline-clean (VideoCard only), lint

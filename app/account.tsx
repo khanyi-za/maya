@@ -102,6 +102,21 @@ export default function AccountScreen() {
           </View>
         </View>
 
+        {/* Merchant operations — only for MERCHANT-role sessions */}
+        {user.role === 'MERCHANT' && (
+          <>
+            <Text variant="micro" className="mb-2 mt-4 px-5 uppercase tracking-wide">
+              My store
+            </Text>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/merchant')}>
+              <Card className="mx-5 flex-row items-center justify-between px-4 py-4">
+                <Text variant="body">Manage my store</Text>
+                <IconSymbol name="chevron.right" size={20} color={colors.mutedForeground} />
+              </Card>
+            </TouchableOpacity>
+          </>
+        )}
+
         {/* Delivery addresses (view-only) */}
         <Text variant="micro" className="mb-2 mt-4 px-5 uppercase tracking-wide">
           Delivery addresses

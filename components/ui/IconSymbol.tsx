@@ -18,6 +18,13 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
+  // Merchant dashboard
+  storefront: 'storefront',
+  'chart.bar.fill': 'bar-chart',
+  shippingbox: 'inventory-2',
+  'bubble.left.fill': 'chat-bubble-outline',
+  'exclamationmark.triangle': 'warning-amber',
 } as IconMapping;
 
 /**
