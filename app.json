@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "yiiva-app",
+    "name": "YIIVA",
     "slug": "yiiva-app",
+    "owner": "yiiva",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/ICON_BLACK.png",
@@ -22,11 +23,15 @@
       }
     },
     "android": {
+      "package": "za.co.yiiva.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/ICON_BLACK.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -59,6 +64,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9e6accc9-c4a6-413a-8f04-e88884c77fe4"
+      }
     }
   }
 }
