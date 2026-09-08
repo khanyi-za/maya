@@ -3,7 +3,6 @@ import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Text } from './ui/text';
 import { cn } from '@/lib/utils';
-import { getLocalAsset } from '@/lib/local-assets';
 import { imageSource } from '@/lib/image-source';
 import { haptics } from '@/lib/haptics';
 import type { Category } from '@/lib/api-client';
@@ -11,36 +10,12 @@ import type { Category } from '@/lib/api-client';
 interface CategoryFilterProps {
   onCategoryChange: (category: string) => void;
   primaryFilter?: 'men' | 'women' | 'home-lifestyle';
-  searchMode?: boolean;
-  categories?: Category[];
+  categories: Category[];
   /** Hide the synthetic "All" chip (e.g. Search, where "All" is meaningless). */
   showAll?: boolean;
   /** Gender-aware covers for the "All" chip's 2×2 collage (API `allImages` — each distinct from every category cover). */
   allImages?: string[];
 }
-
-// TODO: Replace with actual category-specific images
-const getCategoryImage = (category: string, primaryFilter: string) => {
-  const placeholderImages: { [key: string]: string } = {
-    All: '/demo-assets/tol_thema/The_Bonang_dress_1.png',
-    Pants: '/demo-assets/tol_thema/The_Khosi_Shirt.png',
-    Tops: '/demo-assets/suhu/Suhu_Eye_Knitted_Golfer.png',
-    Footwear: '/demo-assets/tol_thema/Lindy_2.png',
-    Dresses: '/demo-assets/tol_thema/The_Bonang_dress_1.png',
-    Bottoms: '/demo-assets/tol_thema/The_Khosi_Shirt.png',
-    Sports: '/demo-assets/suhu/Suhu_Eye_Knitted_Golfer.png',
-    Hoodies: '/demo-assets/suhu/Suhu_Eye_Knitted_Golfer.png',
-    Streetwear: '/demo-assets/suhu/Suhu_Eye_Knitted_Golfer.png',
-    Activewear: '/demo-assets/tol_thema/The_Bonang_dress_1.png',
-  };
-  return placeholderImages[category] || '/demo-assets/tol_thema/The_Bonang_dress_1.png';
-};
-
-const categoryMap = {
-  men: ['All', 'Pants', 'Tops', 'Footwear', 'Sports', 'Hoodies', 'Streetwear', 'Smart Casual', 'Denim', 'Accessories', 'Outerwear', 'Formal'],
-  women: ['All', 'Dresses', 'Tops', 'Bottoms', 'Footwear', 'Activewear', 'Loungewear', 'Formal', 'Accessories', 'Outerwear', 'Swimwear', 'Lingerie'],
-  'home-lifestyle': ['All', 'Furniture', 'Décor', 'Kitchen', 'Bedroom', 'Bathroom', 'Lighting', 'Textiles', 'Art & Prints', 'Plants & Garden', 'Storage', 'Candles & Scents'],
-};
 
 interface Chip {
   value: string;
@@ -50,9 +25,8 @@ interface Chip {
   collage?: string[];
 }
 
-export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', searchMode = false, categories, showAll = true, allImages }: CategoryFilterProps) {
+export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', categories, showAll = true, allImages }: CategoryFilterProps) {
   const [selectedValue, setSelectedValue] = useState('All');
-  const apiDriven = categories !== undefined;
 
   const handleCategoryPress = (value: string) => {
     haptics.light();
@@ -63,31 +37,25 @@ export function CategoryFilter({ onCategoryChange, primaryFilter = 'men', search
   React.useEffect(() => {
     setSelectedValue('All');
     onCategoryChange('All');
-  }, [primaryFilter, onCategoryChange, searchMode]);
+  }, [primaryFilter, onCategoryChange]);
 
-  let chips: Chip[];
-  if (apiDriven) {
-    if (categories.length === 0) return null;
-    chips = [
-      // The "All" chip renders a 2×2 collage of the API's gender-aware
-      // `allImages` (each distinct from every category chip) — a single
-      // borrowed image made "All" a visual duplicate of its neighbour. With
-      // fewer than 4 images it degrades to a single cover, then to the first
-      // category's image.
-      ...(showAll
-        ? [{
-            value: 'All',
-            label: 'All',
-            image: imageSource(allImages?.[0] ?? categories[0].image),
-            collage: allImages && allImages.length >= 4 ? allImages.slice(0, 4) : undefined,
-          }]
-        : []),
-      ...categories.map((c) => ({ value: c.slug, label: c.displayName, image: imageSource(c.image) })),
-    ];
-  } else {
-    const names = searchMode ? ['All', 'Men', 'Women', 'Home & Lifestyle'] : categoryMap[primaryFilter] || categoryMap.men;
-    chips = names.map((name) => ({ value: name, label: name, image: getLocalAsset(getCategoryImage(name, primaryFilter)) }));
-  }
+  if (categories.length === 0) return null;
+  const chips: Chip[] = [
+    // The "All" chip renders a 2×2 collage of the API's gender-aware
+    // `allImages` (each distinct from every category chip) — a single
+    // borrowed image made "All" a visual duplicate of its neighbour. With
+    // fewer than 4 images it degrades to a single cover, then to the first
+    // category's image.
+    ...(showAll
+      ? [{
+          value: 'All',
+          label: 'All',
+          image: imageSource(allImages?.[0] ?? categories[0].image),
+          collage: allImages && allImages.length >= 4 ? allImages.slice(0, 4) : undefined,
+        }]
+      : []),
+    ...categories.map((c) => ({ value: c.slug, label: c.displayName, image: imageSource(c.image) })),
+  ];
 
   return (
     <View className="py-4">

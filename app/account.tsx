@@ -146,6 +146,18 @@ export default function AccountScreen() {
         >
           Sign out
         </Button>
+
+        {/* Permanent deletion (App Store requirement) — its own screen with
+            password confirm; kept visually quiet below sign-out. */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => router.push('/delete-account')}
+          className="mx-5 mt-4 items-center py-2"
+        >
+          <Text variant="caption" className="text-muted-foreground underline">
+            Delete my account
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     );
   };

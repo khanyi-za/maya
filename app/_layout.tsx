@@ -2,19 +2,25 @@ import '../global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PostHogProvider } from 'posthog-react-native';
 
+import { Splash } from '@/components/Splash';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { useSocialStore } from '@/lib/social-store';
 import { useAuthHydration, useForegroundRefresh } from '@/lib/auth';
 import { usePushNotificationTaps, usePushRegistration } from '@/lib/push';
 import { posthog, useScreenTracking } from '@/lib/analytics';
+
+// Keep the native splash up until the branded JS splash (components/Splash)
+// has rendered — it hides the native one itself on first layout.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Create QueryClient instance with mobile-optimized configuration
 const queryClient = new QueryClient({
@@ -46,6 +52,8 @@ const queryClient = new QueryClient({
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const loadSocialState = useSocialStore((state) => state.loadState);
+  const [splashDone, setSplashDone] = useState(false);
+  const handleSplashDone = useCallback(() => setSplashDone(true), []);
 
   // Auth session: cold-start refresh-token hydration + foreground token renewal
   // (docs/auth-mobile-guide.md §5.1, §9).
@@ -112,6 +120,7 @@ export default function RootLayout() {
       ) : (
         content
       )}
+      {!splashDone && <Splash onDone={handleSplashDone} />}
     </GestureHandlerRootView>
   );
 }

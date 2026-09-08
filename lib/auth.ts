@@ -81,6 +81,23 @@ export async function logout(): Promise<void> {
   }
 }
 
+/**
+ * DELETE /auth/account — permanent deletion (App Store requirement).
+ * Requires the current password; the server anonymizes the user, revokes all
+ * sessions and removes push tokens. On success the LOCAL session is cleared
+ * the same way logout does (no unregister call needed — server already
+ * deleted the push tokens). Server refusals (wrong password, store owner,
+ * in-flight orders) throw and leave the session intact.
+ */
+export async function deleteAccount(password: string): Promise<void> {
+  await api('/auth/account', {
+    method: 'DELETE',
+    body: { password },
+  });
+  await clearRefreshToken();
+  useAuthStore.getState().setGuest();
+}
+
 /** POST /auth/forgot-password — always 200s (never reveals registration). */
 export async function forgotPassword(email: string): Promise<void> {
   await api('/auth/forgot-password', {

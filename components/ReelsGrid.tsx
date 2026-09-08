@@ -2,21 +2,27 @@ import React from 'react';
 import { View } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { ReelCard } from './ReelCard';
-import { REELS } from '@/lib/reels-fixtures';
+import { useReels } from '@/hooks/useSearchQueries';
+import { type Reel } from '@/lib/api-client';
 
 /**
- * 2-column discover grid of merchant reels. Static (bundled fixtures) for now;
- * the same layout will render a backend feed once wired. Rendered inside the
+ * 2-column discover grid of merchant reels, served by GET /api/reels (the
+ * dynamic feed that replaced the bundled fixtures). Rendered inside the
  * Search screen's browse scroll view, below the categories / trending row.
+ * When the catalogue has no product videos the whole section disappears —
+ * an empty "Discover" header would just advertise the gap.
  */
 export function ReelsGrid() {
+  const { data: reels } = useReels();
+  if (!reels || reels.length === 0) return null;
+
   // Two independent columns (not aligned rows): the right column's first cell
   // is shorter, so the columns offset and the whole grid "runs" — the
   // staggered mosaic look. Original indices are preserved for the full-screen
   // feed's start position.
-  const left: { reel: (typeof REELS)[number]; index: number }[] = [];
+  const left: { reel: Reel; index: number }[] = [];
   const right: typeof left = [];
-  REELS.forEach((reel, index) => {
+  reels.forEach((reel, index) => {
     (index % 2 === 0 ? left : right).push({ reel, index });
   });
 

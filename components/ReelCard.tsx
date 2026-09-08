@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { type ReelFixture } from '@/lib/reels-fixtures';
+import { type Reel } from '@/lib/api-client';
 import { imageSource } from '@/lib/image-source';
 
 /**
@@ -20,7 +20,7 @@ export function ReelCard({
   index,
   size = 'tall',
 }: {
-  reel: ReelFixture;
+  reel: Reel;
   index: number;
   /** 'short' trims the cell (staggers the grid columns for the running look). */
   size?: 'tall' | 'short';

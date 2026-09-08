@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
+  getReels,
   getSearchSuggestions,
   searchByCategory,
   searchProducts,
@@ -77,4 +78,20 @@ export function useTrackSearch(
     trackSearch({ q, genderType: gender, resultCount }).catch(() => {});
     track('search_performed', { query: q, gender: gender ?? null, resultCount });
   }, [query, gender, resultCount]);
+}
+
+/**
+ * Reels feed — the dynamic replacement for the retired static fixtures.
+ * One page (up to 50) is plenty for the discover grid + full-screen feed v1;
+ * the endpoint is cursor-paginated when infinite scroll is wanted. Both the
+ * Search grid and app/reels.tsx read this same query, so the grid's tap-index
+ * always matches the full-screen feed's order.
+ */
+export function useReels() {
+  return useQuery({
+    queryKey: ['reels'],
+    queryFn: () => getReels({ limit: 50 }),
+    staleTime: 5 * 60 * 1000,
+    select: (data) => data.reels,
+  });
 }

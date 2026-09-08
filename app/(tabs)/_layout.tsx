@@ -57,14 +57,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
-        options={{
-          href: null, // Hidden from tab bar
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="safari" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="search"
         options={{
           title: 'Search',

@@ -1,20 +1,12 @@
 // Yiiva REST API Client
 // This file contains all API endpoint functions for the mobile app
 
-import { homeFixtures } from './home-fixtures';
 import { getOptionalAuthHeader } from './api';
 import { API_ORIGIN } from './api-origin';
 
 // =============================================================================
 // API CONFIGURATION
 // =============================================================================
-
-/**
- * While true, the Home read endpoints resolve bundled doc-shaped fixtures
- * instead of hitting the network. Off since 2026-06-11 — Home runs against
- * the live nuwa /api surface. Flip back on only for offline UI work.
- */
-export const USE_FIXTURES = false;
 
 // Backend origin resolution (Metro-host-derived, network-portable) lives in
 // lib/api-origin.ts.
@@ -699,19 +691,45 @@ async function fetchAPIPaginated<T>(
  * Backend endpoint: GET /api/products/feed
  * Database query: products JOIN merchants WHERE genderType = X
  */
+
+/**
+ * Product reel — one VIDEO product image on an ACTIVE product/store.
+ * Wire shape matches the retired lib/reels-fixtures ReelFixture, so the reel
+ * UI (ReelsGrid / ReelCard / app/reels.tsx) renders it unchanged.
+ */
+export interface Reel {
+  id: string;
+  video: string;
+  productId: string;
+  productName: string;
+  description: string;
+  priceInCents: number;
+  merchant: { username: string; displayName: string; logo: string };
+}
+
+/**
+ * Get the reels feed (newest product videos first).
+ * Backend endpoint: GET /api/reels — public, cursor-paginated.
+ */
+export async function getReels(params?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<{ reels: Reel[]; pagination: CursorPagination }> {
+  const queryParams = new URLSearchParams({ limit: String(params?.limit ?? 50) });
+  if (params?.cursor) queryParams.append('cursor', params.cursor);
+
+  const { data, pagination } = await fetchAPIPaginated<{ reels: Reel[] }>(
+    `/reels?${queryParams}`
+  );
+  return { reels: data.reels, pagination };
+}
+
 export async function getProductFeed(params: {
   genderType: GenderType;
   category?: string;
   limit?: number;
   cursor?: string;
 }): Promise<{ products: Product[]; pagination: CursorPagination }> {
-  if (USE_FIXTURES) {
-    const products = homeFixtures.feed(params.genderType, params.category);
-    return {
-      products,
-      pagination: { limit: products.length, nextCursor: null, hasMore: false },
-    };
-  }
 
   const queryParams = new URLSearchParams({
     genderType: params.genderType,
@@ -761,12 +779,6 @@ export async function getNewArrivals(params: {
   /** Offset cursor — the "See All" browse screen pages; the rail omits it. */
   cursor?: string;
 }): Promise<{ products: Product[]; pagination: CursorPagination }> {
-  if (USE_FIXTURES) {
-    return {
-      products: homeFixtures.newArrivals(params.genderType) as unknown as Product[],
-      pagination: { limit: 6, nextCursor: null, hasMore: false },
-    };
-  }
 
   const queryParams = new URLSearchParams({
     genderType: params.genderType,
@@ -789,9 +801,6 @@ export async function getNewArrivals(params: {
 export async function getCategories(params: {
   genderType?: GenderType;
 }): Promise<{ categories: Category[]; allImages?: string[] }> {
-  if (USE_FIXTURES) {
-    return { categories: homeFixtures.categories(params.genderType ?? 'women') };
-  }
 
   // No genderType → all categories with ≥1 ACTIVE product (any gender) —
   // for surfaces without a gender context (e.g. the brand page rail).
@@ -815,9 +824,6 @@ export async function getTrendingMerchants(params?: {
   genderType?: GenderType;
   limit?: number;
 }): Promise<{ merchants: TrendingMerchant[] }> {
-  if (USE_FIXTURES) {
-    return { merchants: homeFixtures.trendingMerchants() };
-  }
 
   const queryParams = new URLSearchParams();
   if (params?.genderType) queryParams.append('genderType', params.genderType);
@@ -832,9 +838,6 @@ export async function getTrendingMerchants(params?: {
  * Auth: optional (guest via X-Cart-Session). 404 -> treat as empty cart.
  */
 export async function getCartSummary(): Promise<CartSummary> {
-  if (USE_FIXTURES) {
-    return homeFixtures.cartSummary();
-  }
 
   return fetchAPI<CartSummary>(`/cart/summary`);
 }

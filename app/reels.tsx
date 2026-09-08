@@ -17,7 +17,8 @@ import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-conte
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { haptics } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
-import { REELS, type ReelFixture } from '@/lib/reels-fixtures';
+import { type Reel } from '@/lib/api-client';
+import { useReels } from '@/hooks/useSearchQueries';
 import { formatZAR } from '@/lib/format';
 import { imageSource } from '@/lib/image-source';
 import { useSocialStore } from '@/lib/social-store';
@@ -37,9 +38,13 @@ export default function ReelsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { start } = useLocalSearchParams<{ start?: string }>();
+  // Same query the ReelsGrid rendered from, so index and order always match
+  // (and this screen is only reachable from that grid — cache is warm).
+  const { data } = useReels();
+  const reels = data ?? [];
   const startIndex = Math.min(
     Math.max(parseInt(start ?? '0', 10) || 0, 0),
-    REELS.length - 1,
+    Math.max(reels.length - 1, 0),
   );
   const [activeIndex, setActiveIndex] = useState(startIndex);
   const [muted, setMuted] = useState(false);
@@ -56,10 +61,10 @@ export default function ReelsScreen() {
 
   // One reel_viewed per reel that becomes active (including the start reel).
   useEffect(() => {
-    const reel = REELS[activeIndex];
+    const reel = reels[activeIndex];
     if (!reel) return;
     track('reel_viewed', { productId: reel.productId, index: activeIndex });
-  }, [activeIndex]);
+  }, [activeIndex, reels]);
 
   return (
     <View style={styles.container}>
@@ -67,7 +72,7 @@ export default function ReelsScreen() {
       <StatusBar barStyle="light-content" />
 
       <FlatList
-        data={REELS}
+        data={reels}
         keyExtractor={(r) => r.id}
         renderItem={({ item, index }) => (
           <ReelItem
@@ -120,7 +125,7 @@ function ReelItem({
   muted,
   insets,
 }: {
-  reel: ReelFixture;
+  reel: Reel;
   active: boolean;
   muted: boolean;
   insets: EdgeInsets;

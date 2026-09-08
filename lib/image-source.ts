@@ -1,9 +1,7 @@
 // Resolves an API media URL to an expo-image / expo-video source.
-// Real backend URLs are absolute (Cloudinary) and pass through as { uri }.
-// Legacy /demo-assets/ paths resolve to bundled assets via getLocalAsset —
-// that branch (and this distinction) disappears once fixtures are retired.
-
-import { getLocalAsset } from './local-assets';
+// All backend URLs are absolute (Cloudinary) and pass through as { uri }.
+// (The legacy /demo-assets/ bundled-asset branch was retired 2026-09-07 with
+// the fixtures purge — anything non-absolute is simply not renderable.)
 
 const VIDEO_UPLOAD = '/video/upload/';
 
@@ -25,5 +23,5 @@ function toPlayableVideoUrl(url: string): string {
 export function imageSource(url: string | null | undefined): any {
   if (!url) return undefined;
   if (url.startsWith('http')) return { uri: toPlayableVideoUrl(url) };
-  return getLocalAsset(url) ?? undefined;
+  return undefined;
 }
