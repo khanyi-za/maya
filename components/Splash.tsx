@@ -11,7 +11,7 @@ import { Animated, Image, StyleSheet, View } from 'react-native';
 // deep-blue ground + white wordmark so it dissolves into this screen; we hide
 // it the moment this JS splash lays out.
 
-const HOLD_MS = 1400; // how long the splash stays before fading
+const HOLD_MS = 2700; // how long the splash stays before fading (owner call, 2026-09-08)
 const FADE_MS = 350;
 
 export function Splash({ onDone }: { onDone: () => void }) {
