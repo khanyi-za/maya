@@ -145,6 +145,7 @@ Each `screens/<n>-<name>/` has:
 - **Adding/removing bundled assets needs a full Metro restart** (`expo start -c`); Fast Refresh won't re-register the asset map.
 - **`useVideoPlayer`'s setup callback runs ONCE at player creation** — driving play/pause/mute there means state changes never reach the player (hero videos didn't autoplay on swipe; mute toggle was dead). Drive playback from a `useEffect` on the live state instead (see `HeroMediaItem` in artist/[artistId] and `MediaItem` in product/[productId]).
 - Push-notification **delivery** can't be tested in Expo Go / the iOS Simulator (no APNs) — emails + the in-app inbox cover it; push needs a dev build on a physical device.
+- **`Pressable` with a FUNCTION `style` prop (`style={({pressed}) => ...}`) silently loses ALL its styles** under NativeWind's component interop — buttons render as bare unstyled text. Cost a debug on the splash welcome gate (2026-09-08). Use the house pattern instead: `TouchableOpacity` with a plain `style`/`className` and `activeOpacity`.
 
 ### New screens (2026-06 mobile build)
 

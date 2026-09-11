@@ -1,333 +1,237 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
-  FlatList,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
-  Text,
+  TouchableOpacity,
   View,
-  type ViewToken,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
+import { VideoView, useVideoPlayer } from 'expo-video';
+
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Text } from '@/components/ui/text';
+import { Avatar } from '@/components/ui/avatar';
+import { ProductCard } from '@/components/ProductCard';
+import { useReels } from '@/hooks/useSearchQueries';
+import { useSimilarProducts } from '@/hooks/useProductQueries';
+import { imageSource } from '@/lib/image-source';
+import { formatZAR } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
-import { type Reel } from '@/lib/api-client';
-import { useReels } from '@/hooks/useSearchQueries';
-import { formatZAR } from '@/lib/format';
-import { imageSource } from '@/lib/image-source';
-import { useSocialStore } from '@/lib/social-store';
-import { resolveBookmarked, useServerSocial } from '@/lib/server-social';
-import { useRequireAuth, useToggleBookmark } from '@/hooks/useSocialMutations';
-
-const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 
 /**
- * Full-screen, TikTok/Instagram-style vertical reel feed (Phase 1 — static
- * product reels). Opened from the Search discover grid at a given index. Each
- * reel overlays the merchant logo + product name/price/description (bottom-left)
- * and a vertical action stack (bottom-right): "Buy" → product detail, like
- * (local v1), bookmark (server, auth-gated).
+ * Reel detail — Pinterest-style video page (replaced the full-screen infinite
+ * reel loop, owner call 2026-09-08, inspo assets/inspo/1-3.jpeg). Opened from
+ * the Search Discover grid at a given index:
+ *
+ *   - the tapped reel plays in a rounded card ~52% of the screen height
+ *     (spec: 40–57%), floating back + mute controls on top of it;
+ *   - below: the brand identity row (tap → brand profile), a featured row for
+ *     the reel's own product (tap → product detail), then "More from {brand}"
+ *     — the brand's other items as product cards via the brand-scoped
+ *     /products/:id/similar endpoint.
+ *
+ * Deliberately dark like the old reel feed: the video is the hero.
  */
-export default function ReelsScreen() {
+
+const SCREEN_H = Dimensions.get('window').height;
+const VIDEO_H = Math.round(SCREEN_H * 0.52);
+
+export default function ReelDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { start } = useLocalSearchParams<{ start?: string }>();
-  // Same query the ReelsGrid rendered from, so index and order always match
-  // (and this screen is only reachable from that grid — cache is warm).
   const { data } = useReels();
   const reels = data ?? [];
-  const startIndex = Math.min(
+  const index = Math.min(
     Math.max(parseInt(start ?? '0', 10) || 0, 0),
     Math.max(reels.length - 1, 0),
   );
-  const [activeIndex, setActiveIndex] = useState(startIndex);
+  const reel = reels[index];
+
   const [muted, setMuted] = useState(false);
-  // Playback follows navigation focus: closing the feed OR pushing away
-  // (Buy → product, merchant tap) pauses the active reel immediately —
-  // without this the audio kept playing behind the next screen.
   const isFocused = useIsFocused();
 
-  const onViewRef = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    const first = viewableItems[0];
-    if (first?.index != null) setActiveIndex(first.index);
+  const player = useVideoPlayer(reel ? imageSource(reel.video) : null, (p) => {
+    p.loop = true;
   });
-  const viewConfigRef = useRef({ itemVisiblePercentThreshold: 80 });
 
-  // One reel_viewed per reel that becomes active (including the start reel).
+  // Drive playback from live state (never from the setup callback — footgun).
   useEffect(() => {
-    const reel = reels[activeIndex];
+    if (!player) return;
+    player.muted = muted;
+    if (isFocused) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [player, isFocused, muted]);
+
+  useEffect(() => {
     if (!reel) return;
-    track('reel_viewed', { productId: reel.productId, index: activeIndex });
-  }, [activeIndex, reels]);
+    track('reel_viewed', { productId: reel.productId, index });
+  }, [reel, index]);
+
+  const similarQuery = useSimilarProducts(reel?.productId);
+  // The similar rail is brand-scoped server-side; drop the reel's own product
+  // if it appears (it has its own featured row above the grid).
+  const gridProducts = useMemo(
+    () => (similarQuery.data?.products ?? []).filter((p) => p.id !== reel?.productId),
+    [similarQuery.data, reel?.productId],
+  );
+
+  if (!reel) {
+    return (
+      <View style={[styles.container, styles.centerAll]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Text className="text-white">This reel is no longer available.</Text>
+        <TouchableOpacity onPress={() => router.back()} className="mt-4 p-3">
+          <Text className="text-white underline">Go back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
 
-      <FlatList
-        data={reels}
-        keyExtractor={(r) => r.id}
-        renderItem={({ item, index }) => (
-          <ReelItem
-            reel={item}
-            active={index === activeIndex && isFocused}
-            muted={muted}
-            insets={insets}
-          />
-        )}
-        pagingEnabled
+      <ScrollView
         showsVerticalScrollIndicator={false}
-        getItemLayout={(_, i) => ({ length: SCREEN_H, offset: SCREEN_H * i, index: i })}
-        initialScrollIndex={startIndex}
-        onViewableItemsChanged={onViewRef.current}
-        viewabilityConfig={viewConfigRef.current}
-        windowSize={3}
-        maxToRenderPerBatch={2}
-        decelerationRate="fast"
-      />
-
-      <Pressable
-        style={[styles.closeButton, { top: insets.top + 12 }]}
-        onPress={() => router.back()}
-        hitSlop={12}
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }}
       >
-        <IconSymbol name="xmark" size={22} color="#fff" />
-      </Pressable>
+        {/* Video card */}
+        <View style={styles.videoCard}>
+          <VideoView
+            player={player}
+            style={{ width: '100%', height: '100%' }}
+            contentFit="cover"
+            nativeControls={false}
+          />
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.back()}
+            hitSlop={12}
+          >
+            <IconSymbol name="chevron.left" size={22} color="#111" />
+          </Pressable>
+          <Pressable
+            style={styles.muteButton}
+            onPress={() => {
+              haptics.light();
+              setMuted((m) => !m);
+            }}
+            hitSlop={12}
+          >
+            <IconSymbol
+              name={muted ? 'speaker.slash' : 'speaker.wave.2'}
+              size={18}
+              color="#fff"
+            />
+          </Pressable>
+        </View>
 
-      <Pressable
-        style={[styles.muteButton, { top: insets.top + 12 }]}
-        onPress={() => {
-          haptics.light();
-          setMuted((m) => !m);
-        }}
-        hitSlop={12}
-      >
-        <IconSymbol
-          name={muted ? 'speaker.slash' : 'speaker.wave.2'}
-          size={20}
-          color="#fff"
-        />
-      </Pressable>
-    </View>
-  );
-}
-
-function ReelItem({
-  reel,
-  active,
-  muted,
-  insets,
-}: {
-  reel: Reel;
-  active: boolean;
-  muted: boolean;
-  insets: EdgeInsets;
-}) {
-  const router = useRouter();
-  const player = useVideoPlayer(imageSource(reel.video), (p) => {
-    p.loop = true;
-  });
-
-  // Only the on-screen reel plays (FlatList windowing keeps a few mounted).
-  // Mute is driven here too — the setup callback runs once at creation, so
-  // live state must be applied in an effect (same lesson as the brand hero).
-  useEffect(() => {
-    player.muted = muted;
-    if (active) player.play();
-    else player.pause();
-  }, [active, muted, player]);
-
-  // Watch time: clock runs while this reel is the active one (`active`
-  // already folds in navigation focus, so Buy/merchant pushes stop it too).
-  // Captured on deactivate/unmount via the cleanup; sub-500ms flicks skipped.
-  useEffect(() => {
-    if (!active) return;
-    const startedAt = Date.now();
-    return () => {
-      const watchMs = Date.now() - startedAt;
-      if (watchMs >= 500) {
-        track('reel_watched', { productId: reel.productId, watchMs });
-      }
-    };
-  }, [active, reel.productId]);
-
-  // Safety net for the audio-after-close leak: expo-video's release on
-  // unmount can lag the pop animation — stop playback explicitly. The catch
-  // guards the case where the native player was already released.
-  useEffect(() => {
-    return () => {
-      try {
-        player.pause();
-      } catch {
-        // already released — nothing to stop
-      }
-    };
-  }, [player]);
-
-  // Like is local-only (v1); bookmark is server-backed + auth-gated.
-  const likedProducts = useSocialStore((s) => s.likedProducts);
-  const toggleLike = useSocialStore((s) => s.toggleLike);
-  const isLiked = likedProducts.has(reel.productId);
-
-  const { bookmarked } = useServerSocial();
-  const toggleBookmark = useToggleBookmark();
-  const requireAuth = useRequireAuth();
-  const isBookmarked = resolveBookmarked(bookmarked, reel.productId, false);
-
-  const handleBookmark = () => {
-    if (!requireAuth()) return;
-    toggleBookmark(reel.productId, isBookmarked);
-  };
-
-  return (
-    <View style={styles.item}>
-      <VideoView
-        player={player}
-        style={styles.video}
-        contentFit="cover"
-        nativeControls={false}
-      />
-      <View style={styles.scrim} pointerEvents="none" />
-
-      {/* Bottom-left: merchant + product */}
-      <View style={[styles.info, { bottom: insets.bottom + 24 }]}>
-        <Pressable
-          style={styles.merchantRow}
+        {/* Brand identity → profile */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={styles.brandRow}
           onPress={() => router.push(`/artist/${reel.merchant.username}`)}
         >
-          <Image source={imageSource(reel.merchant.logo)} style={styles.logo} contentFit="cover" />
-          <Text style={styles.brand}>{reel.merchant.displayName}</Text>
-        </Pressable>
-        <Text style={styles.product} numberOfLines={1}>
-          {reel.productName}
-        </Text>
-        <Text style={styles.price}>{formatZAR(reel.priceInCents)}</Text>
-        <Text style={styles.desc} numberOfLines={2}>
-          {reel.description}
-        </Text>
-      </View>
+          <Avatar
+            uri={reel.merchant.logo || undefined}
+            fallback={reel.merchant.displayName[0]}
+            size={40}
+            variant="logo"
+          />
+          <View style={{ flex: 1 }}>
+            <Text variant="heading" className="text-white" numberOfLines={1}>
+              {reel.merchant.displayName}
+            </Text>
+            <Text variant="caption" className="text-white/60">
+              View brand
+            </Text>
+          </View>
+          <IconSymbol name="chevron.right" size={18} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
 
-      {/* Bottom-right: action stack */}
-      <View style={[styles.actions, { bottom: insets.bottom + 24 }]}>
-        <ActionButton
-          icon="cart"
-          label="Buy"
-          onPress={() => {
-            haptics.medium();
-            track('reel_buy_tapped', { productId: reel.productId });
-            router.push(`/product/${reel.productId}`);
-          }}
-        />
-        {/* like/save colors match the --like / --save tokens (theme-independent). */}
-        <ActionButton
-          icon={isLiked ? 'heart.fill' : 'heart'}
-          color={isLiked ? '#ff3040' : '#fff'}
-          label="Like"
-          onPress={() => {
-            haptics.light();
-            toggleLike(reel.productId);
-          }}
-        />
-        <ActionButton
-          icon={isBookmarked ? 'bookmark.fill' : 'bookmark'}
-          color={isBookmarked ? '#ffd24d' : '#fff'}
-          label="Save"
-          onPress={() => {
-            haptics.light();
-            handleBookmark();
-          }}
-        />
-      </View>
+        {/* More from this brand */}
+        {gridProducts.length > 0 && (
+          <>
+            <Text variant="heading" className="mb-3 mt-6 px-4 text-white">
+              More from {reel.merchant.displayName}
+            </Text>
+            <View style={styles.grid}>
+              {gridProducts.map((p) => (
+                <View key={p.id} style={styles.gridItem}>
+                  <ProductCard
+                    productImage={imageSource(p.image)}
+                    profileImage={imageSource(reel.merchant.logo)}
+                    artistName={p.merchant.displayName}
+                    productTitle={p.name}
+                    price={formatZAR(p.price)}
+                    productId={p.id}
+                    artistId={reel.merchant.username}
+                  />
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+      </ScrollView>
     </View>
-  );
-}
-
-function ActionButton({
-  icon,
-  label,
-  color = '#fff',
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  color?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.action} onPress={onPress} hitSlop={8}>
-      <IconSymbol name={icon as any} size={30} color={color} />
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  item: { width: SCREEN_W, height: SCREEN_H, backgroundColor: '#000' },
-  // VideoView needs explicit dimensions (absoluteFill renders zero-sized).
-  video: { width: '100%', height: '100%' },
-  scrim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 240,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  centerAll: { alignItems: 'center', justifyContent: 'center' },
+  videoCard: {
+    height: VIDEO_H,
+    marginHorizontal: 12,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#111',
   },
-  closeButton: {
+  backButton: {
     position: 'absolute',
-    left: 16,
+    top: 12,
+    left: 12,
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   muteButton: {
     position: 'absolute',
-    right: 16,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  info: {
-    position: 'absolute',
-    left: 16,
-    right: 88, // leave room for the action stack
-  },
-  merchantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  logo: {
+    bottom: 12,
+    right: 12,
     width: 36,
     height: 36,
     borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-    backgroundColor: '#333',
-  },
-  brand: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  product: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  price: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  desc: { color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 18 },
-  actions: {
-    position: 'absolute',
-    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
-    gap: 22,
+    justifyContent: 'center',
   },
-  action: { alignItems: 'center', gap: 4 },
-  actionLabel: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    rowGap: 12,
+  },
+  gridItem: { width: '50%', paddingHorizontal: 4 },
 });

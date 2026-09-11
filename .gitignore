@@ -11,3 +11,4 @@ expo-env.d.ts
 # @end expo-cli
 # Expo local state
 .expo/
+.DS_Store
