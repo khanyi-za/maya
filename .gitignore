@@ -12,3 +12,8 @@ expo-env.d.ts
 # Expo local state
 .expo/
 .DS_Store
+
+# Internal working notes — local only (repo is public)
+CLAUDE.md
+status.md
+.claude/
